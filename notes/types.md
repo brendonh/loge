@@ -5,6 +5,7 @@
         - Memory settings (transient, permanent, LRU)
         - Etc
 
+
 - LogeObject
     - Per-object metadata
         - Key 
@@ -15,6 +16,7 @@
     - Scaffolding
         - Pointer to LogeType
         - Pointer to live object
+
 
 - LogeTransaction
     - Transaction context

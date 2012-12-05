@@ -8,6 +8,7 @@
         - List
         - Map, string keys
   
+
 - Storage
 
     - Types of stored entity:
@@ -26,15 +27,18 @@
         - Never?
         - Periodic with queue of dirty FDs?
 
+
 - Versioning
     - Everything versioned, immutable
     - In-memory store is map of objID -> linked list, head is current version
+
   
 - Transactions
     - Transaction context keeps (new obj, prev version) list for modified
         (and, optionally, read) objects
     - At commit time, lock tracked objects, check versions, write, release
     - If any version doesn't match, fail the transaction
+
 
 - Replication
     - One-way
@@ -48,6 +52,7 @@
         - When old master comes back up, ask new master for most recent
           timestamp it applied, roll back own data from stored write log
           to previous versions
+
 
 - Sharding
     - Not yet, but based on circular hash of object type / PK
