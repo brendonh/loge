@@ -16,7 +16,7 @@ type Person struct {
 	Father *Person
 
 	Children []*Person `loge:"copy"`
-	Temp []*Person
+	Temp []*Person `loge:"keep"`
 }
 
 func (p *Person) TypeName() string {
@@ -52,8 +52,12 @@ func main() {
 	brend.Children = append(brend.Children, owen)
 	brend.Temp = append(brend.Temp, owen, brend, owen)
 
+	fmt.Printf("Brend: %s::%d %v\n", brend.Loge.Key, brend.Loge.Version, brend)
+
 	var brend2 = brend.Loge.Update().(*Person)
 	brend2.Age = 59
+	brend.Children[0] = brend
+	brend2.Temp[1] = owen
 
 	fmt.Printf("Brend: %s::%d %v\n", brend.Loge.Key, brend.Loge.Version, brend)
 	//fmt.Printf("Owen: %s %v\n", owen.Loge.Key, owen)

@@ -31,19 +31,26 @@ func (obj *LogeObject) SetOnObject() {
 }
 
 
-func (obj LogeObject) Update() interface{} {
+func (obj *LogeObject) Update() interface{} {
+
 	var orig = reflect.ValueOf(obj.Object).Elem()
-
 	var val = reflect.New(orig.Type()).Elem()
-
 	val.Set(orig)
-
 	mungeNested(val)
 
 	var newObject = val.Addr().Interface()
-	obj.Object = newObject
-	obj.SetOnObject()
-	obj.Version++
+
+	var newObj = &LogeObject{
+		DB: obj.DB,
+		Type: obj.Type,
+		Key: obj.Key,
+		Version: obj.Version + 1,
+		Dirty: true,
+		TransactionCount: 0,
+		Object: newObject,
+	}
+	newObj.SetOnObject()
+
 	return newObject
 }
 
@@ -59,14 +66,19 @@ func mungeNested(val reflect.Value) {
 		case reflect.Array, 
 			reflect.Slice:
 			
-			var newField = reflect.New(field.Type()).Elem()
-			
 			switch ft.Tag.Get("loge") {
 			case "copy":
+				var newField = reflect.New(field.Type()).Elem()
 				newField = reflect.AppendSlice(newField, field)
+				field.Set(newField)
+			case "keep":
+				// Do nothing
+			default:
+				// Empty it
+				field.Set(reflect.New(field.Type()).Elem())
 			}
 
-			field.Set(newField)
+
 		}
 	}
 }
