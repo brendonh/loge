@@ -120,7 +120,7 @@ func (t *Transaction) tryCommit() bool {
 		if !involved.Obj.TryLock() {
 			return false
 		}
-		defer involved.Obj.Unlock()		
+		defer involved.Obj.Unlock()
 
 		if involved.FromVersion != involved.Obj.Current.Version {
 			// fmt.Printf("Version mismatch on %s: %d vs %d\n",
