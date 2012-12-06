@@ -46,31 +46,40 @@ func (t *Transaction) String() string {
 }
 
 
+func (t *Transaction) Exists(typeName string, key string) bool {
+	return t.getObj(typeName, key, false, false) != nil
+}
+
 func (t *Transaction) ReadObj(typeName string, key string) interface{} {
-	return t.getObj(typeName, key, false).Version.Object
+	return t.getObj(typeName, key, false, true).Version.Object
 }
 
 
 func (t *Transaction) WriteObj(typeName string, key string) interface{} {
-	return t.getObj(typeName, key, true).Version.Object
+	return t.getObj(typeName, key, true, true).Version.Object
 }
 
 
 func (t *Transaction) SetObj(typeName string, key string, obj interface{}) {
-	var involved = t.getObj(typeName, key, true)
+	var involved = t.getObj(typeName, key, true, true)
 	involved.Version.Object = obj
 }
 
 
-func (t *Transaction) getObj(typeName string, key string, update bool) *InvolvedObject {
+func (t *Transaction) getObj(typeName string, key string, update bool, create bool) *InvolvedObject {
 
 	if t.State != ACTIVE {
 		panic(fmt.Sprintf("GetObj from transaction %s\n", t))
 	}
 
 	involved, ok := t.Objs[key]
+
+	if involved == nil && !create {
+		return nil
+	}
+
 	if ok {
-		if update {
+		if update && involved != nil {
 			involved.Dirty = true
 		}
 		return involved
@@ -78,7 +87,12 @@ func (t *Transaction) getObj(typeName string, key string, update bool) *Involved
 
 	var logeObj = t.DB.GetObj(typeName, key)
 	if logeObj == nil {
-		logeObj = t.DB.CreateObj(typeName, key)
+		if create {
+			logeObj = t.DB.CreateObj(typeName, key)
+		} else {
+			t.Objs[key] = nil
+			return nil
+		}
 	}
 
 	logeObj.SpinLock()
@@ -125,6 +139,10 @@ func (t *Transaction) tryCommit() bool {
 	var writeList = make([]*InvolvedObject, 0, len(t.Objs))
 	
 	for _, involved := range t.Objs {
+		if involved == nil {
+			continue
+		}
+
 		var obj = involved.Obj.Ensure()
 
 		if !obj.TryLock() {
