@@ -74,15 +74,17 @@ func (t *Transaction) getObj(typeName string, key string, update bool, create bo
 
 	involved, ok := t.Objs[key]
 
-	if involved == nil && !create {
+	if ok && involved == nil && !create {
 		return nil
 	}
 
 	if ok {
-		if update && involved != nil {
-			involved.Dirty = true
+		if involved != nil {
+			if update {
+				involved.Dirty = true
+			}
+			return involved
 		}
-		return involved
 	}
 
 	var logeObj = t.DB.GetObj(typeName, key)
