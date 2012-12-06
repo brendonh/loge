@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
-
+	"strings"
+	"strconv"
 	"runtime"
 )
 
@@ -16,33 +17,74 @@ type Counter struct {
 
 func TestIncrements(db *LogeDB) {
 
-	runtime.GOMAXPROCS(8)
-
 	db.CreateType("counter")
 
-	db.CreateObj("counter", "counter", &Counter{
-		Value: 0,
-	})
+	fmt.Printf("Testing without contention...\n")
+	TestIncrement(db, false)
+
+	fmt.Printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
+	
+	fmt.Printf("Testing with contention...\n")
+	TestIncrement(db, true)
+}
+
+func TestIncrement(db *LogeDB, contend bool) {
+
+	runtime.GOMAXPROCS(8)
+
+	var procs = 8
+	var loops = 100000
+	var total = float64(procs * loops)
+
+	if contend {
+		db.CreateObj("counter", "counter", &Counter{ Value: 0 })
+	} else {
+		for i := 0; i < procs; i++ {
+			key := fmt.Sprintf("counter%d", i)
+			db.CreateObj("counter", key, &Counter{ Value: 0 })
+		}
+	}
+			
 
 	var start = time.Now()
 
 	var group sync.WaitGroup
-	for i := 0; i < 50; i++ {
+	for i := 0; i < procs; i++ {
+		var key string
+		if contend {
+			key = "counter"
+		} else {
+			key = fmt.Sprintf("counter%d", i)
+		}
 		group.Add(1)
-		go LoopIncrement(db, &group, 5000)
+		go LoopIncrement(db, key, &group, loops)
 	}
 	group.Wait()
 
 	var dur = time.Since(start)
-	var val = db.GetObj("counter").Current.Object.(*Counter).Value
-	fmt.Printf("Final val: %d (%s)\n", val, dur)
+	var secs = float64(dur) / float64(time.Second)
+
+	var val string
+	if contend {
+		val = strconv.Itoa(db.GetObj("counter").Current.Object.(*Counter).Value)
+	} else {
+		var bits = make([]string, 0, procs)
+		for i := 0; i < procs; i++ {
+			key := fmt.Sprintf("counter%d", i)
+			var temp = db.GetObj(key).Current.Object.(*Counter).Value
+			bits = append(bits, strconv.Itoa(temp))
+		}
+		val = strings.Join(bits, ", ")
+	}		
+	fmt.Printf("Final val(s): %s (%s, %.0f/s)\n", val, dur, total / secs)
 
 }
 
 
-func LoopIncrement(db *LogeDB, group *sync.WaitGroup, count int) {
+func LoopIncrement(db *LogeDB, key string, group *sync.WaitGroup, count int) {
+	var actor = func(t *Transaction) { Increment(t, key) }
 	for i := 0; i < count; i++ {		
-		if !db.Transact(Increment, 100 * time.Millisecond) {
+		if !db.Transact(actor, 0) {
 			fmt.Printf("Timeout!\n")
 		}
 	}
@@ -50,7 +92,7 @@ func LoopIncrement(db *LogeDB, group *sync.WaitGroup, count int) {
 }
 
 
-func Increment(trans *Transaction) {
-	var counter = trans.WriteObj("counter").(*Counter)
+func Increment(trans *Transaction, key string) {
+	var counter = trans.WriteObj(key).(*Counter)
 	counter.Value += 1
 }

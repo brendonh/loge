@@ -29,11 +29,8 @@ func (p *Person) Key() string {
 
 func main() {
 	var db = NewLogeDB()
-
-	fmt.Printf("DB: %v\n", db)
-
-	TestIncrements(db)
 	
+	TestIncrements(db)
 }
 
 
