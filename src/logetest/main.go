@@ -10,6 +10,6 @@ import (
 func main() {
 	var db = NewLogeDB()
 	
-	//TestIncrements(db)
-	TestCreation(db)
+	TestIncrements(db)
+	//TestCreation(db)
 }
