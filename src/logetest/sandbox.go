@@ -8,15 +8,13 @@ import (
 
 
 type Person struct {
-	Loge *LogeObject
-
 	Name string
 	Age int
 
 	Father *Person
 
 	Children []*Person `loge:"copy"`
-	Temp []*Person `loge:"keep"`
+	Temp []*Person
 }
 
 func (p *Person) TypeName() string {
@@ -35,33 +33,53 @@ func main() {
 
 	db.CreateType("person")
 
+	initPeople(db)
+	printPeople(db)
+	updatePeople(db)
+	printPeople(db)
+}
+
+func initPeople(db *LogeDB) {
 	var brend = &Person{
 		Name: "Brendon",
 		Age: 31,
-		Children: []*Person {},
+		Children: []*Person{},
 	}
 	db.Add(brend)
 
-	var owen = &Person {
+	var owen = &Person{
 		Name: "Owen",
 		Age: 1,
 		Father: brend,
 	}
 	db.Add(owen)
+}
 
-	brend.Children = append(brend.Children, owen)
-	brend.Temp = append(brend.Temp, owen, brend, owen)
+func printPeople(db *LogeDB) {
+	fmt.Printf("~~~~~~~~~~~~~~~~~~\n")
+	fmt.Printf("Keys: %v\n", db.Keys())
 
-	fmt.Printf("Brend: %s::%d %v\n", brend.Loge.Key, brend.Loge.Version, brend)
+	var loBrend = db.GetObj("person::Brendon")
+	var brend = loBrend.Current.Object.(*Person)
+	fmt.Printf("Brend: %s (%d) %v\n", loBrend.Key, loBrend.Current.Version, brend)
 
-	var brend2 = brend.Loge.Update().(*Person)
-	brend2.Age = 59
-	brend.Children[0] = brend
-	brend2.Temp[1] = owen
+	var loOwen = db.GetObj("person::Owen")
+	var owen = loOwen.Current.Object.(*Person)
+	fmt.Printf("Owen: %s (%d) %v\n", loOwen.Key, loOwen.Current.Version, owen)
+}
 
-	fmt.Printf("Brend: %s::%d %v\n", brend.Loge.Key, brend.Loge.Version, brend)
-	//fmt.Printf("Owen: %s %v\n", owen.Loge.Key, owen)
+func updatePeople(db *LogeDB) {
+	var loBrend = db.GetObj("person::Brendon")
+	var brendV2 = loBrend.NewVersion()
+	var brendV3 = loBrend.NewVersion()
 
-	fmt.Printf("Brend2: %s::%d %v\n", brend2.Loge.Key, brend2.Loge.Version, brend2)
+	brendV2.Object.(*Person).Age = 59
+	brendV3.Object.(*Person).Age = 61
+
+	var success = loBrend.ApplyVersion(brendV2)
+	fmt.Printf("Apply success: %v\n", success)
+
+	success = loBrend.ApplyVersion(brendV3)
+	fmt.Printf("Apply success: %v\n", success)
 
 }

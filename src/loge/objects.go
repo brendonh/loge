@@ -2,6 +2,7 @@ package loge
 
 import (
 	"reflect"
+	"sync"
 )
 
 type Logeable interface {
@@ -13,49 +14,69 @@ type LogeObject struct {
 	DB *LogeDB
 	Type *LogeType
 	Key string
+	Current *LogeObjectVersion
+	Mutex sync.Mutex
+}
+
+type LogeObjectVersion struct {
 	Version int
-	Dirty bool
 	TransactionCount int
 	Object interface{}
+	Previous *LogeObjectVersion
 }
 
 
-func (obj *LogeObject) SetOnObject() {
-	var val = reflect.ValueOf(obj.Object).Elem()
-	var field = val.FieldByName("Loge")
-	if !field.IsValid() {
-		panic("No Loge attribute on object")
+func InitializeObject(key string, object interface{}, db *LogeDB, t *LogeType) *LogeObject {
+
+	var obj = &LogeObject{
+		DB: db,
+		Type: t,
+		Key: key,
+		Current: &LogeObjectVersion{
+			Version: 0,
+			Previous: nil,
+			TransactionCount: 0,
+			Object: object,
+		},
 	}
 
-	field.Set(reflect.ValueOf(obj))
+	var version = obj.NewVersion()
+	version.Object = object
+	obj.Current = version
+	return obj
 }
 
 
-func (obj *LogeObject) Update() interface{} {
+func (obj *LogeObject) NewVersion() *LogeObjectVersion {
+	return &LogeObjectVersion{
+		Version: obj.Current.Version + 1,
+		Previous: obj.Current,
+		TransactionCount: 0,
+		Object: copyObject(obj.Current.Object),
+	}
+}
 
-	var orig = reflect.ValueOf(obj.Object).Elem()
+
+func (obj *LogeObject) ApplyVersion(version *LogeObjectVersion) bool {
+	obj.Mutex.Lock()
+	defer obj.Mutex.Unlock()
+
+	if (version.Version != obj.Current.Version + 1) {
+		return false
+	}
+
+	version.Previous = obj.Current
+	obj.Current = version
+
+	return true
+}
+
+
+func copyObject(object interface{}) interface{} {
+	var orig = reflect.ValueOf(object).Elem()
 	var val = reflect.New(orig.Type()).Elem()
 	val.Set(orig)
-	mungeNested(val)
 
-	var newObject = val.Addr().Interface()
-
-	var newObj = &LogeObject{
-		DB: obj.DB,
-		Type: obj.Type,
-		Key: obj.Key,
-		Version: obj.Version + 1,
-		Dirty: true,
-		TransactionCount: 0,
-		Object: newObject,
-	}
-	newObj.SetOnObject()
-
-	return newObject
-}
-
-
-func mungeNested(val reflect.Value) {
 	var t = val.Type()
 	for i := 0; i < val.NumField(); i++ {
 
@@ -77,10 +98,10 @@ func mungeNested(val reflect.Value) {
 				// Empty it
 				field.Set(reflect.New(field.Type()).Elem())
 			}
-
-
 		}
 	}
+
+	return val.Addr().Interface()
 }
 
 

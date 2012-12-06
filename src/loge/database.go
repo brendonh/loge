@@ -36,12 +36,12 @@ func (db *LogeDB) CreateType(name string) *LogeType {
 }
 
 
-func (db *LogeDB) Add(obj Logeable) {
-	db.CreateObj(obj.TypeName(), obj.Key(), obj)
+func (db *LogeDB) Add(obj Logeable) *LogeObject {
+	return db.CreateObj(obj.TypeName(), obj.Key(), obj)
 }
 
 
-func (db *LogeDB) CreateObj(typeName string, key string, object interface{}) {
+func (db *LogeDB) CreateObj(typeName string, key string, object interface{}) *LogeObject {
 	lt, ok := db.types[typeName]
 
 	if !ok {
@@ -51,22 +51,31 @@ func (db *LogeDB) CreateObj(typeName string, key string, object interface{}) {
 	if key == "" {
 		key = RandomLogeKey()
 	}
-	
-	var obj = &LogeObject{
-		DB: db,
-		Type: lt,
-		Key: key,
-		Version: 0,
-		Dirty: true,
-		TransactionCount: 0,
-		Object: object,
+
+	_, ok = db.objects[key]
+
+	if ok {
+		panic(fmt.Sprintf("Key exists: '%s'", key))
 	}
-	obj.SetOnObject()
+	
+	var obj = InitializeObject(key, object, db, lt)
+	db.objects[key] = obj
+	return obj
 }
 
 
 func (db *LogeDB) GetObj(key string) *LogeObject {
 	return db.objects[key]
+}
+
+
+// For testing only
+func (db *LogeDB) Keys() []string {
+	var keys []string
+	for k := range db.objects {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 
