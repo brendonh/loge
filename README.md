@@ -52,12 +52,25 @@ func main() {
 
 	db.Transact(func(trans *loge.Transaction) {
 		if trans.Exists("person", "brendon") {
-			var brendon = trans.ReadObj("person", "brendon").(*Person)
-			fmt.Printf("Existing obj: %v\n", brendon)
+			var brendon = trans.WriteObj("person", "brendon").(*Person)
+
+			fmt.Printf("Existing Brendon: %v\n", brendon)
+
+			// Update
+			brendon.Age = 41
 		}
 
 		var defaultObj = trans.ReadObj("person", "someone else").(*Person)
 		fmt.Printf("Default value: %v\n", defaultObj)
+	}, 0)
+
+
+	// ------------------------------------
+	// Check the update
+
+	db.Transact(func(trans *loge.Transaction) {
+		var brendon = trans.ReadObj("person", "brendon").(*Person)
+		fmt.Printf("Updated Brendon: %v\n", brendon)
 	}, 0)
 
 
