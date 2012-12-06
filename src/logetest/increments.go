@@ -31,7 +31,7 @@ func TestIncrement(db *LogeDB, contend bool) {
 
 	runtime.GOMAXPROCS(8)
 
-	var procs = 1
+	var procs = 8
 	var loops = 50000
 	var total = float64(procs * loops)
 

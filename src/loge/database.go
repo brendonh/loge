@@ -78,20 +78,15 @@ func (db *LogeDB) CreateObj(typeName string, key string) *LogeObject {
 }
 
 
-
 func (db *LogeDB) GetObj(typeName string, key string) *LogeObject {
-	db.mutex.Lock()
-	defer db.mutex.Unlock()
-
-	// TODO: Loading!
 	objMap, ok := db.objects[typeName]
 	if !ok {
-		objMap = make(map[string]*LogeObject)
-		db.objects[typeName] = objMap
+		return nil
 	}
 
 	obj, ok := objMap[key]
 	if !ok {
+		// TODO: Loading!
 		return nil
 	}
 
@@ -100,11 +95,12 @@ func (db *LogeDB) GetObj(typeName string, key string) *LogeObject {
 
 
 func (db *LogeDB) EnsureObj(obj *LogeObject) *LogeObject {
-	db.mutex.Lock()
-	defer db.mutex.Unlock()
 
 	var typeName = obj.Type.Name
 	var key = obj.Key
+
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
 
 	objMap, ok := db.objects[typeName]
 
