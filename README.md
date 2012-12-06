@@ -87,10 +87,11 @@ func main() {
 
 Output:
 
-```
+```bash
 $ go install logetest && ./bin/logetest 
-Existing obj: &{Brendon 31}
+Existing Brendon: &{Brendon 31}
 Default value: &{ 0}
+Updated Brendon: &{Brendon 41}
 Commit 1: true
 Commit 2: false
 Nai: &{Nai Yu 32}
