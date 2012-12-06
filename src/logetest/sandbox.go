@@ -4,6 +4,7 @@ import (
 	. "loge"
 
 	"fmt"
+	"time"
 )
 
 
@@ -31,13 +32,20 @@ func main() {
 
 	fmt.Printf("DB: %v\n", db)
 
-	db.CreateType("person")
+	TestIncrements(db)
+	
+}
 
+
+
+func Sandbox(db *LogeDB) {
+	db.CreateType("person")
 	initPeople(db)
 	printPeople(db)
 	updatePeople(db)
 	printPeople(db)
 }
+
 
 func initPeople(db *LogeDB) {
 	var brend = &Person{
@@ -66,20 +74,47 @@ func printPeople(db *LogeDB) {
 	var loOwen = db.GetObj("person::Owen")
 	var owen = loOwen.Current.Object.(*Person)
 	fmt.Printf("Owen: %s (%d) %v\n", loOwen.Key, loOwen.Current.Version, owen)
+	fmt.Printf("Owen's father's age: %d\n", owen.Father.Age)
 }
 
 func updatePeople(db *LogeDB) {
-	var loBrend = db.GetObj("person::Brendon")
-	var brendV2 = loBrend.NewVersion()
-	var brendV3 = loBrend.NewVersion()
+	fmt.Printf("~~~~~~~~~~~~~~~~~~\n")
 
-	brendV2.Object.(*Person).Age = 59
-	brendV3.Object.(*Person).Age = 61
+	//var loOwen = db.GetObj("person::Owen")
+	//loOwen.Locked = LOCKED
+	go (func() {
+		time.Sleep(5000 * time.Millisecond)
+		//loOwen.Locked = UNLOCKED
+	})()
 
-	var success = loBrend.ApplyVersion(brendV2)
-	fmt.Printf("Apply success: %v\n", success)
+	var trans = db.CreateTransaction()
 
-	success = loBrend.ApplyVersion(brendV3)
-	fmt.Printf("Apply success: %v\n", success)
+	fmt.Printf("Transaction: %v\n", trans)
+
+	var brend = trans.WriteObj("person::Brendon").(*Person)
+	brend.Age = 59
+
+	var owen = trans.ReadObj("person::Owen").(*Person)
+
+	fmt.Printf("Brend: %v\n", brend)
+	fmt.Printf("Owen: %v\n", owen)
+
+	var success = trans.Commit()
+	fmt.Printf("Commit success: %v %s\n", success, trans)
 
 }
+
+// func updatePeople(db *LogeDB) {
+// 	var loBrend = db.GetObj("person::Brendon")
+// 	var brendV2 = loBrend.NewVersion()
+// 	var brendV3 = loBrend.NewVersion()
+
+// 	brendV2.Object.(*Person).Age = 59
+// 	brendV3.Object.(*Person).Age = 61
+
+// 	var success = loBrend.ApplyVersion(brendV2)
+// 	fmt.Printf("Apply success: %v\n", success)
+
+// 	success = loBrend.ApplyVersion(brendV3)
+// 	fmt.Printf("Apply success: %v\n", success)
+// }

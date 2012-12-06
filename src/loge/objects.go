@@ -2,7 +2,7 @@ package loge
 
 import (
 	"reflect"
-	"sync"
+	"sync/atomic"
 )
 
 type Logeable interface {
@@ -10,12 +10,18 @@ type Logeable interface {
 	Key() string
 }
 
+type LockState int32
+const (
+	UNLOCKED = 0
+	LOCKED = 1
+)
+
 type LogeObject struct {
 	DB *LogeDB
 	Type *LogeType
 	Key string
+	Locked int32
 	Current *LogeObjectVersion
-	Mutex sync.Mutex
 }
 
 type LogeObjectVersion struct {
@@ -32,6 +38,7 @@ func InitializeObject(key string, object interface{}, db *LogeDB, t *LogeType) *
 		DB: db,
 		Type: t,
 		Key: key,
+		Locked: 0,
 		Current: &LogeObjectVersion{
 			Version: 0,
 			Previous: nil,
@@ -58,9 +65,6 @@ func (obj *LogeObject) NewVersion() *LogeObjectVersion {
 
 
 func (obj *LogeObject) ApplyVersion(version *LogeObjectVersion) bool {
-	obj.Mutex.Lock()
-	defer obj.Mutex.Unlock()
-
 	if (version.Version != obj.Current.Version + 1) {
 		return false
 	}
@@ -70,6 +74,25 @@ func (obj *LogeObject) ApplyVersion(version *LogeObjectVersion) bool {
 
 	return true
 }
+
+
+func (obj *LogeObject) TryLock() bool {
+	return  atomic.CompareAndSwapInt32(
+		&obj.Locked, UNLOCKED, LOCKED)
+}
+
+func (obj *LogeObject) SpinLock() {
+	for {
+		if obj.TryLock() {
+			return
+		}
+	}
+}
+
+func (obj *LogeObject) Unlock() {
+	obj.Locked = UNLOCKED
+}
+
 
 
 func copyObject(object interface{}) interface{} {

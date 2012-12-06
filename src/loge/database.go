@@ -3,6 +3,7 @@ package loge
 import (
 	"fmt"
 	"crypto/rand"
+	"time"
 )
 
 type LogeTypeMap map[string]*LogeType
@@ -33,6 +34,28 @@ func (db *LogeDB) CreateType(name string) *LogeType {
 	}
 	db.types[name] = t
 	return t
+}
+
+func (db *LogeDB) CreateTransaction() *Transaction {
+	return NewTransaction(db)
+}
+
+
+type Transactor func(*Transaction)
+
+func (db *LogeDB) Transact(actor Transactor, timeout time.Duration) bool {
+	var start = time.Now()
+	for {
+		var t = db.CreateTransaction()
+		actor(t)
+		if t.Commit() {
+			return true
+		}
+		if timeout > 0 && time.Since(start) > timeout {
+			break
+		}
+	}
+	return false
 }
 
 
