@@ -3,24 +3,24 @@ loge -- Go object database
 
 Current Features:
 
-    * Stores Go objects
-    * Full per-object version history
-    * Arbitrary ACID transactions
-    * Increment benchmark (in `logetest/increment.go`) currently runs 1M TPS on my box, or ~250k TPS when lock contention is high
+* Stores Go objects
+* Full per-object version history
+* Arbitrary ACID transactions
+* Increment benchmark (in `logetest/increment.go`) currently runs 1M TPS on my box, or ~250k TPS when lock contention is high
 
 Upcoming features (in approximate order):
 
-    * Object reference traversal
-    * Durability
-    * Replication and failover (no auto-sharding)
-    * REST API
-    * Javascript transactions
+* Object reference traversal
+* Durability
+* Replication and failover (no auto-sharding)
+* REST API
+* Javascript transactions
 
 
 Synopsis:
 ---------
 
-```
+```go
 package main
 
 import (
