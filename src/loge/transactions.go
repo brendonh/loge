@@ -46,17 +46,23 @@ func (t *Transaction) String() string {
 }
 
 
-func (t *Transaction) ReadObj(key string) interface{} {
-	return t.GetObj(key, false)
+func (t *Transaction) ReadObj(typeName string, key string) interface{} {
+	return t.getObj(typeName, key, false).Version.Object
 }
 
 
-func (t *Transaction) WriteObj(key string) interface{} {
-	return t.GetObj(key, true)
+func (t *Transaction) WriteObj(typeName string, key string) interface{} {
+	return t.getObj(typeName, key, true).Version.Object
 }
 
 
-func (t *Transaction) GetObj(key string, update bool) interface{} {
+func (t *Transaction) SetObj(typeName string, key string, obj interface{}) {
+	var involved = t.getObj(typeName, key, true)
+	involved.Version.Object = obj
+}
+
+
+func (t *Transaction) getObj(typeName string, key string, update bool) *InvolvedObject {
 
 	if t.State != ACTIVE {
 		panic(fmt.Sprintf("GetObj from transaction %s\n", t))
@@ -67,14 +73,16 @@ func (t *Transaction) GetObj(key string, update bool) interface{} {
 		if update {
 			involved.Dirty = true
 		}
-		return involved.Version.Object
+		return involved
 	}
 
-	var logeObj = t.DB.GetObj(key)
+	var logeObj = t.DB.GetObj(typeName, key)
 	if logeObj == nil {
-		return nil
+		logeObj = t.DB.CreateObj(typeName, key)
 	}
 
+	logeObj.SpinLock()
+	defer logeObj.Unlock()
 	var fromVersion = logeObj.Current.Version
 
 	involved = &InvolvedObject{
@@ -86,7 +94,7 @@ func (t *Transaction) GetObj(key string, update bool) interface{} {
 
 	t.Objs[key] = involved
 
-	return involved.Version.Object
+	return involved
 }
 
 
@@ -117,14 +125,16 @@ func (t *Transaction) tryCommit() bool {
 	var writeList = make([]*InvolvedObject, 0, len(t.Objs))
 	
 	for _, involved := range t.Objs {
-		if !involved.Obj.TryLock() {
+		var obj = involved.Obj.Ensure()
+
+		if !obj.TryLock() {
 			return false
 		}
-		defer involved.Obj.Unlock()
+		defer obj.Unlock()
 
-		if involved.FromVersion != involved.Obj.Current.Version {
+		if !obj.Applicable(involved.Version) {
 			// fmt.Printf("Version mismatch on %s: %d vs %d\n",
-			// 	key, involved.FromVersion, involved.Obj.Current.Version)
+			// 	obj.Key, involved.FromVersion, involved.Obj.Current.Version)
 			t.State = ABORTED
 			return true
 		}
@@ -136,7 +146,7 @@ func (t *Transaction) tryCommit() bool {
 	
 	for _, involved := range writeList {
 		involved.Obj.ApplyVersion(involved.Version)
-		//fmt.Printf("Writing %v: %v\n", involved.Obj.Key, success)
+		//fmt.Printf("Wrote %d: %v\n", involved.Version.Version, involved.Obj.Current.Object)
 	}
 
 	t.State = FINISHED

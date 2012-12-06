@@ -4,14 +4,16 @@ import (
 	"fmt"
 	"crypto/rand"
 	"time"
+	"sync"
 )
 
 type LogeTypeMap map[string]*LogeType
-type LogeObjectMap map[string]*LogeObject
+type LogeObjectMap map[string]map[string]*LogeObject
 
 type LogeDB struct {
 	types LogeTypeMap
 	objects LogeObjectMap
+	mutex sync.Mutex
 }
 
 func NewLogeDB() *LogeDB {
@@ -21,7 +23,7 @@ func NewLogeDB() *LogeDB {
 	}
 }
 
-func (db *LogeDB) CreateType(name string) *LogeType {
+func (db *LogeDB) CreateType(name string, exemplar interface{}) *LogeType {
 	_, ok := db.types[name]
 
 	if ok {
@@ -31,10 +33,12 @@ func (db *LogeDB) CreateType(name string) *LogeType {
 	var t = &LogeType {
 		Name: name,
 		Version: 1,
+		Exemplar: exemplar,
 	}
 	db.types[name] = t
 	return t
 }
+
 
 func (db *LogeDB) CreateTransaction() *Transaction {
 	return NewTransaction(db)
@@ -59,12 +63,7 @@ func (db *LogeDB) Transact(actor Transactor, timeout time.Duration) bool {
 }
 
 
-func (db *LogeDB) Add(obj Logeable) *LogeObject {
-	return db.CreateObj(obj.TypeName(), obj.Key(), obj)
-}
-
-
-func (db *LogeDB) CreateObj(typeName string, key string, object interface{}) *LogeObject {
+func (db *LogeDB) CreateObj(typeName string, key string) *LogeObject {
 	lt, ok := db.types[typeName]
 
 	if !ok {
@@ -75,20 +74,53 @@ func (db *LogeDB) CreateObj(typeName string, key string, object interface{}) *Lo
 		key = RandomLogeKey()
 	}
 
-	_, ok = db.objects[key]
+	return InitializeObject(key, db, lt)
+}
 
-	if ok {
-		panic(fmt.Sprintf("Key exists: '%s'", key))
+
+
+func (db *LogeDB) GetObj(typeName string, key string) *LogeObject {
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
+
+	// TODO: Loading!
+	objMap, ok := db.objects[typeName]
+	if !ok {
+		objMap = make(map[string]*LogeObject)
+		db.objects[typeName] = objMap
 	}
-	
-	var obj = InitializeObject(key, object, db, lt)
-	db.objects[key] = obj
+
+	obj, ok := objMap[key]
+	if !ok {
+		return nil
+	}
+
 	return obj
 }
 
 
-func (db *LogeDB) GetObj(key string) *LogeObject {
-	return db.objects[key]
+func (db *LogeDB) EnsureObj(obj *LogeObject) *LogeObject {
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
+
+	var typeName = obj.Type.Name
+	var key = obj.Key
+
+	objMap, ok := db.objects[typeName]
+
+	if !ok {
+		objMap = make(map[string]*LogeObject)
+		db.objects[typeName] = objMap
+	}
+
+	existing, ok := objMap[key]
+
+	if ok {
+		return existing
+	}
+
+	objMap[key] = obj
+	return obj
 }
 
 

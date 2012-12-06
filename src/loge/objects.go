@@ -3,6 +3,7 @@ package loge
 import (
 	"reflect"
 	"sync/atomic"
+	"runtime"
 )
 
 type Logeable interface {
@@ -32,9 +33,13 @@ type LogeObjectVersion struct {
 }
 
 
-func InitializeObject(key string, object interface{}, db *LogeDB, t *LogeType) *LogeObject {
+func InitializeObject(key string, db *LogeDB, t *LogeType) *LogeObject {
 
-	var obj = &LogeObject{
+	var orig = reflect.ValueOf(t.Exemplar).Elem()
+	var val = reflect.New(orig.Type()).Elem()
+	var obj = val.Addr().Interface()
+
+	return &LogeObject{
 		DB: db,
 		Type: t,
 		Key: key,
@@ -43,14 +48,9 @@ func InitializeObject(key string, object interface{}, db *LogeDB, t *LogeType) *
 			Version: 0,
 			Previous: nil,
 			TransactionCount: 0,
-			Object: object,
+			Object: obj,
 		},
 	}
-
-	var version = obj.NewVersion()
-	version.Object = object
-	obj.Current = version
-	return obj
 }
 
 
@@ -64,20 +64,27 @@ func (obj *LogeObject) NewVersion() *LogeObjectVersion {
 }
 
 
-func (obj *LogeObject) ApplyVersion(version *LogeObjectVersion) bool {
-	if (version.Version != obj.Current.Version + 1) {
-		return false
+func (obj *LogeObject) Ensure() *LogeObject {
+	if obj.Current.Version == 0 {
+		obj = obj.DB.EnsureObj(obj)
 	}
+	return obj
+}
 
+
+func (obj *LogeObject) Applicable(version *LogeObjectVersion) bool {
+	return version.Version == obj.Current.Version + 1
+}
+
+
+func (obj *LogeObject) ApplyVersion(version *LogeObjectVersion) {
 	version.Previous = obj.Current
 	obj.Current = version
-
-	return true
 }
 
 
 func (obj *LogeObject) TryLock() bool {
-	return  atomic.CompareAndSwapInt32(
+	return atomic.CompareAndSwapInt32(
 		&obj.Locked, UNLOCKED, LOCKED)
 }
 
@@ -86,6 +93,8 @@ func (obj *LogeObject) SpinLock() {
 		if obj.TryLock() {
 			return
 		}
+		runtime.Gosched()
+		//fmt.Printf("Spinning on %s\n", obj.Key)
 	}
 }
 
@@ -94,8 +103,11 @@ func (obj *LogeObject) Unlock() {
 }
 
 
-
 func copyObject(object interface{}) interface{} {
+	if object == nil {
+		return nil
+	}
+
 	var orig = reflect.ValueOf(object).Elem()
 	var val = reflect.New(orig.Type()).Elem()
 	val.Set(orig)
