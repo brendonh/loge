@@ -114,7 +114,7 @@ Random Notes
 ------------
 
 * Generally, all DB interaction happens in a transaction
-* `ReadObj`, `WriteObj, and `SetObj` mark an object as important, and the transaction will abort at commit time if the object has changed
+* `ReadObj`, `WriteObj`, and `SetObj` mark an object as important, and the transaction will abort at commit time if the object has changed
 * Changes to an object retrieved with `ReadObj` are discarded, unless `WriteObj` or `SetObj` are called for it later in the transaction.
 * Object creation (via `SetObj`) follows transaction semantics
 * A transaction run by `db.Transact(Func, Timeout)` will retry in a loop until it succeeds or times out
