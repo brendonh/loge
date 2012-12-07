@@ -35,9 +35,7 @@ type LogeObjectVersion struct {
 
 func InitializeObject(key string, db *LogeDB, t *LogeType) *LogeObject {
 
-	var orig = reflect.ValueOf(t.Exemplar).Elem()
-	var val = reflect.New(orig.Type()).Elem()
-	var obj = val.Addr().Interface()
+	var obj = reflect.Zero(reflect.TypeOf(t.Exemplar)).Interface()
 
 	return &LogeObject{
 		DB: db,
@@ -94,7 +92,6 @@ func (obj *LogeObject) SpinLock() {
 			return
 		}
 		runtime.Gosched()
-		//fmt.Printf("Spinning on %s\n", obj.Key)
 	}
 }
 
@@ -104,11 +101,13 @@ func (obj *LogeObject) Unlock() {
 
 
 func copyObject(object interface{}) interface{} {
-	if object == nil {
-		return nil
+	var value = reflect.ValueOf(object)
+
+	if value.IsNil() {
+		return object
 	}
 
-	var orig = reflect.ValueOf(object).Elem()
+	var orig = value.Elem()
 	var val = reflect.New(orig.Type()).Elem()
 	val.Set(orig)
 
