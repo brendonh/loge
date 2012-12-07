@@ -36,6 +36,8 @@ func (db *LogeDB) CreateType(name string, exemplar interface{}) *LogeType {
 		Exemplar: exemplar,
 	}
 	db.types[name] = t
+	db.objects[name] = make(map[string]*LogeObject)
+	
 	return t
 }
 
@@ -64,11 +66,7 @@ func (db *LogeDB) Transact(actor Transactor, timeout time.Duration) bool {
 
 
 func (db *LogeDB) CreateObj(typeName string, key string) *LogeObject {
-	lt, ok := db.types[typeName]
-
-	if !ok {
-		panic(fmt.Sprintf("Unknown type '%s'", typeName))
-	}
+	var lt = db.types[typeName]
 
 	if key == "" {
 		key = RandomLogeKey()
@@ -79,10 +77,7 @@ func (db *LogeDB) CreateObj(typeName string, key string) *LogeObject {
 
 
 func (db *LogeDB) GetObj(typeName string, key string) *LogeObject {
-	objMap, ok := db.objects[typeName]
-	if !ok {
-		return nil
-	}
+	var objMap = db.objects[typeName]
 
 	obj, ok := objMap[key]
 	if !ok {
@@ -96,18 +91,12 @@ func (db *LogeDB) GetObj(typeName string, key string) *LogeObject {
 
 func (db *LogeDB) EnsureObj(obj *LogeObject) *LogeObject {
 
-	var typeName = obj.Type.Name
+	var objMap = db.objects[obj.Type.Name]
+
 	var key = obj.Key
 
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
-
-	objMap, ok := db.objects[typeName]
-
-	if !ok {
-		objMap = make(map[string]*LogeObject)
-		db.objects[typeName] = objMap
-	}
 
 	existing, ok := objMap[key]
 

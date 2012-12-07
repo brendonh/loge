@@ -151,8 +151,6 @@ func (t *Transaction) tryCommit() bool {
 		defer obj.Unlock()
 
 		if !obj.Applicable(involved.Version) {
-			// fmt.Printf("Version mismatch on %s: %d vs %d\n",
-			// 	obj.Key, involved.FromVersion, involved.Obj.Current.Version)
 			t.State = ABORTED
 			return true
 		}
