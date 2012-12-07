@@ -1,5 +1,8 @@
 package loge
 
+import (
+	"reflect"
+)
 
 type LogeType struct {
 	Name string
@@ -7,3 +10,7 @@ type LogeType struct {
 	Exemplar interface{}
 }
 
+
+func (t *LogeType) NilValue() interface{} {
+	return reflect.Zero(reflect.TypeOf(t.Exemplar)).Interface()
+}

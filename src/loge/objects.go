@@ -34,9 +34,6 @@ type LogeObjectVersion struct {
 
 
 func InitializeObject(key string, db *LogeDB, t *LogeType) *LogeObject {
-
-	var obj = reflect.Zero(reflect.TypeOf(t.Exemplar)).Interface()
-
 	return &LogeObject{
 		DB: db,
 		Type: t,
@@ -46,7 +43,7 @@ func InitializeObject(key string, db *LogeDB, t *LogeType) *LogeObject {
 			Version: 0,
 			Previous: nil,
 			TransactionCount: 0,
-			Object: obj,
+			Object: t.NilValue(),
 		},
 	}
 }
@@ -97,6 +94,12 @@ func (obj *LogeObject) SpinLock() {
 
 func (obj *LogeObject) Unlock() {
 	obj.Locked = UNLOCKED
+}
+
+
+func (version *LogeObjectVersion) HasValue() bool {
+	var value = reflect.ValueOf(version.Object)
+	return !value.IsNil()
 }
 
 

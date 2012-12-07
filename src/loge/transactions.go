@@ -47,8 +47,10 @@ func (t *Transaction) String() string {
 
 
 func (t *Transaction) Exists(typeName string, key string) bool {
-	return t.getObj(typeName, key, false, false) != nil
+	var obj = t.getObj(typeName, key, false, false)
+	return obj.Version.HasValue()
 }
+
 
 func (t *Transaction) ReadObj(typeName string, key string) interface{} {
 	return t.getObj(typeName, key, false, true).Version.Object
@@ -66,6 +68,12 @@ func (t *Transaction) SetObj(typeName string, key string, obj interface{}) {
 }
 
 
+func (t *Transaction) DeleteObj(typeName string, key string) {
+	var involved = t.getObj(typeName, key, true, false)
+	involved.Version.Object = involved.Obj.Type.NilValue()
+}
+
+
 func (t *Transaction) getObj(typeName string, key string, update bool, create bool) *InvolvedObject {
 
 	if t.State != ACTIVE {
@@ -74,31 +82,21 @@ func (t *Transaction) getObj(typeName string, key string, update bool, create bo
 
 	involved, ok := t.Objs[key]
 
-	if ok && involved == nil && !create {
-		return nil
-	}
-
 	if ok {
-		if involved != nil {
-			if update {
-				involved.Dirty = true
-			}
-			return involved
+		if update {
+			involved.Dirty = true
 		}
+		return involved
 	}
 
 	var logeObj = t.DB.GetObj(typeName, key)
 	if logeObj == nil {
-		if create {
-			logeObj = t.DB.CreateObj(typeName, key)
-		} else {
-			t.Objs[key] = nil
-			return nil
-		}
+		logeObj = t.DB.CreateObj(typeName, key)
 	}
 
 	logeObj.SpinLock()
 	defer logeObj.Unlock()
+
 	var fromVersion = logeObj.Current.Version
 
 	involved = &InvolvedObject{

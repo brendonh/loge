@@ -12,6 +12,8 @@ type Person struct {
 func main() {
 	var db = loge.NewLogeDB()
 
-	TestCreation(db)
+	//TestCreation(db)
+	TestDeletion(db)
+	//TestIncrements(db)
 	//Example(db)
 }
