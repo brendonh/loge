@@ -12,33 +12,89 @@ func TestLinks(t *testing.T) {
 
 	var links = NewObjectLinks(spec)
 
-	links.Add("children", "one")
-	links.Add("children", "two")
+	var children = links.Link("children")
 
-	if !compareSets(links.Read("children"), []string{"one", "two"}) {
-		t.Error("Wrong keys after adds: %v", links.Read("children"))
+	children.Add("one")
+	children.Add("two")
+
+	if !compareSets(children.ReadKeys(), []string{"one", "two"}) {
+		t.Error("Wrong keys after adds: %v", 
+			children.ReadKeys())
 	}
 
-	links.Set("children", []string{"three", "four"})
+	children.Set([]string{"three", "four"})
 
-	if !compareSets(links.Read("children"), []string{"three", "four"}) {
-		t.Error("Wrong keys after set: %v", links.Read("children"))
+	if !compareSets(children.ReadKeys(), []string{"three", "four"}) {
+		t.Error("Wrong keys after set: %v", 
+			children.ReadKeys())
 	}
 
-	links.Add("children", "five")
+	children.Add("five")
 
-	if !compareSets(links.Read("children"), []string{"three", "four", "five"}) {
-		t.Error("Wrong keys after set+add: %v", links.Read("children"))
+	if !compareSets(children.ReadKeys(), []string{"three", "four", "five"}) {
+		t.Error("Wrong keys after set+add: %v", 
+			children.ReadKeys())
 	}
 	
-	if !links.Has("children", "four") {
+	if !children.Has("four") {
 		t.Error("Key four missing")
 	}
 
-	if links.Has("children", "one") {
+	children.Remove("four")
+
+	if children.Has("four") {
+		t.Error("Key four present after removal")
+	}
+
+	if children.Has("one") {
 		t.Error("Key one present")
 	}
 
+}
+
+
+func TestLinkFreezing(t *testing.T) {
+	var spec = map[string]string {
+		"children": "obj",
+		"siblings": "obj",
+	}
+
+	var links = NewObjectLinks(spec)
+	var children = links.Link("children")
+
+	if len(links.Freeze()) > 0 {
+		t.Error("New links have changes")
+	}
+
+	children.Add("one")
+
+	var changes = links.Freeze()
+	if len(changes) != 1 {
+		t.Errorf("Wrong number of changes (%d)", len(changes))
+	}
+
+	if changes[0].Name != "children" {
+		t.Error("Wrong linkset changed")
+	}
+
+	if len(links.Freeze()) > 0 {
+		t.Error("Changes on second freeze")
+	}
+
+	children.Remove("two")
+
+	if len(links.Freeze()) > 0 {
+		t.Error("Changes on noop remove")
+	}
+
+	children.Set([]string{ "three", "four" })
+	links.Link("siblings").Add("nine")
+
+	changes = links.Freeze()
+	if len(changes) != 2 {
+		t.Errorf("Wrong number of changes (%d)", len(changes))
+	}
+	
 }
 
 

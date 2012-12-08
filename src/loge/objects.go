@@ -29,6 +29,7 @@ type LogeObjectVersion struct {
 	Version int
 	TransactionCount int
 	Object interface{}
+	Links *ObjectLinks
 	Previous *LogeObjectVersion
 }
 
@@ -44,6 +45,7 @@ func InitializeObject(key string, db *LogeDB, t *LogeType) *LogeObject {
 			Previous: nil,
 			TransactionCount: 0,
 			Object: t.NilValue(),
+			Links: t.NewLinks(),
 		},
 	}
 }
