@@ -2,8 +2,6 @@ package loge
 
 import (
 	_ "fmt"
-
-	"sync"
 )
 
 
@@ -16,8 +14,6 @@ type LinkSet struct {
 	TypeName string
 	Previous map[string]bool
 	Current map[string]bool
-	Mutex sync.Mutex
-	Frozen bool
 }
 
 type LinkSpec map[string]string
@@ -42,7 +38,6 @@ func NewLinkSet(name string, typeName string) *LinkSet {
 		TypeName: typeName,
 		Previous: make(Links),
 		Current: make(Links),
-		Frozen: false,
 	}
 }
 
@@ -63,15 +58,24 @@ func (ol ObjectLinks) NewVersion() *ObjectLinks {
 	return nol
 }
 
+func (ol ObjectLinks) Freeze() {
+	for _, set := range ol.sets {
+		set.Freeze()
+	}
+}
+
+
+
+func (ls *LinkSet) NewVersion() *LinkSet {
+	return &LinkSet{
+		Name: ls.Name,
+		TypeName: ls.TypeName,
+		Previous: ls.Current,
+		Current: make(Links),
+	}
+}
 
 func (ls *LinkSet) Freeze() {
-	ls.Mutex.Lock()
-	defer ls.Mutex.Unlock()
-
-	if ls.Frozen {
-		return 
-	}
-
 	for k, has := range ls.Current {
 		if has {
 			ls.Previous[k] = true
@@ -84,17 +88,6 @@ func (ls *LinkSet) Freeze() {
 	ls.Previous = make(Links)
 }
 
-
-func (ls *LinkSet) NewVersion() *LinkSet {
-	ls.Freeze()
-	return &LinkSet{
-		Name: ls.Name,
-		TypeName: ls.TypeName,
-		Previous: ls.Current,
-		Current: make(Links),
-		Frozen: false,
-	}
-}
 
 
 func (ls *LinkSet) Set(keys []string) {

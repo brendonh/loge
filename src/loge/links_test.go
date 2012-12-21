@@ -62,8 +62,7 @@ func TestLinkFreezing(t *testing.T) {
 	var links = NewObjectLinks(spec)
 	children := links.Link("children")
 
-	links = links.NewVersion()
-	children = links.Link("children")
+	links.Freeze()
 
 	if len(children.Previous) > 0 {
 		t.Error("New links have changes")
@@ -73,15 +72,14 @@ func TestLinkFreezing(t *testing.T) {
 	children.Set([]string { "one", "two", "three" })
 	children.Remove("two")
 
-	links = links.NewVersion()
-	children = links.Link("children")
+	links.Freeze()
 
 	if !compareSets(children.ReadKeys(), []string{ "one", "three" }) {
 		t.Errorf("Wrong keys after freeze: %v", children.ReadKeys())
 		dumpLinkSet(t, children)
 	}
 
-	if len(children.Previous) != 2 {
+	if len(children.Current) != 2 {
 		t.Errorf("Wrong current keys after freeze")
 		dumpLinkSet(t, children)
 	}
@@ -89,6 +87,7 @@ func TestLinkFreezing(t *testing.T) {
 	children.Add("four")
 	children.Remove("one")
 
+	links.Freeze()
 	var links2 = links.NewVersion()
 	var children2 = links2.Link("children")
 

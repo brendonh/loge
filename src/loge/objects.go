@@ -77,6 +77,7 @@ func (obj *LogeObject) Applicable(version *LogeObjectVersion) bool {
 
 
 func (obj *LogeObject) ApplyVersion(version *LogeObjectVersion) {
+	version.Links.Freeze()
 	version.Previous = obj.Current
 	obj.Current = version
 }
