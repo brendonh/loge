@@ -2,6 +2,8 @@ package loge
 
 import (
 	_ "fmt"
+
+	"sync"
 )
 
 
@@ -11,9 +13,11 @@ type ObjectLinks struct {
 
 type LinkSet struct {
 	Name string
-	typeName string
-	links map[string]bool
-	Changed bool
+	TypeName string
+	Previous map[string]bool
+	Current map[string]bool
+	Mutex sync.Mutex
+	Frozen bool
 }
 
 type LinkSpec map[string]string
@@ -35,9 +39,10 @@ func NewObjectLinks(spec LinkSpec) *ObjectLinks {
 func NewLinkSet(name string, typeName string) *LinkSet {
 	return &LinkSet{
 		Name: name,
-		typeName: typeName,
-		links: make(Links),
-		Changed: false,
+		TypeName: typeName,
+		Previous: make(Links),
+		Current: make(Links),
+		Frozen: false,
 	}
 }
 
@@ -46,58 +51,101 @@ func (ol ObjectLinks) Link(set string) *LinkSet {
 	return ol.sets[set]
 }
 
-func (ol ObjectLinks) Freeze() []*LinkSet {
-	var changed = make([]*LinkSet, 0, len(ol.sets))
-	for _, linkset := range ol.sets {
-		if linkset.Changed {
-			changed = append(changed, linkset)
-			linkset.Changed = false
+func (ol ObjectLinks) NewVersion() *ObjectLinks {
+	var nol = &ObjectLinks {
+		sets: make(map[string]*LinkSet),
+	}
+
+	for name, set := range ol.sets {
+		nol.sets[name] = set.NewVersion()
+	}
+
+	return nol
+}
+
+
+func (ls *LinkSet) Freeze() {
+	ls.Mutex.Lock()
+	defer ls.Mutex.Unlock()
+
+	if ls.Frozen {
+		return 
+	}
+
+	for k, has := range ls.Current {
+		if has {
+			ls.Previous[k] = true
+		} else {
+			delete(ls.Previous, k)
 		}
 	}
-	return changed
+
+	ls.Current = ls.Previous
+	ls.Previous = make(Links)
 }
 
-func (ls *LinkSet) Set(keys []string) {
-	ls.links = make(Links)
-	ls.Changed = true
-	for _, key := range keys {
-		ls.links[key] = true
+
+func (ls *LinkSet) NewVersion() *LinkSet {
+	ls.Freeze()
+	return &LinkSet{
+		Name: ls.Name,
+		TypeName: ls.TypeName,
+		Previous: ls.Current,
+		Current: make(Links),
+		Frozen: false,
 	}
 }
 
+
+func (ls *LinkSet) Set(keys []string) {
+	ls.Current = make(Links)
+	for _, key := range keys {
+		ls.Current[key] = true
+	}
+}
+
+
 func (ls *LinkSet) Add(key string) {
-	ls.Touch()
-	ls.links[key] = true
+	ls.Current[key] = true
 }
 
 func (ls *LinkSet) Remove(key string) {
-	_, ok := ls.links[key]
-	if ok {
-		ls.Touch()
-		delete(ls.links, key)
-	}
+	ls.Current[key] = false
 }
 
 func (ls *LinkSet) ReadKeys() []string {
-	var keys = make([]string, 0, len(ls.links))
-	for k := range ls.links {
-		keys = append(keys, k)
+	var roughLen = len(ls.Current) + len(ls.Previous)
+
+	var keys = make([]string, 0, roughLen)
+	var deleted = make(Links)
+
+	for k, has := range ls.Current {
+		if has {
+			keys = append(keys, k)
+		} else {
+			deleted[k] = true;
+		}
 	}
+
+	for k, has := range ls.Previous {
+		if has {
+			_, del := deleted[k]
+			if !del {
+				keys = append(keys, k)
+			}
+		}
+	}
+
 	return keys
 }
 
 func (ls *LinkSet) Has(key string) bool {
-	_, ok := ls.links[key]
-	return ok
+	has, ok := ls.Current[key]
+	if ok {
+		return has
+	}
+
+	has, ok = ls.Previous[key]
+	return ok && has;
 }
 
-func (ls *LinkSet) Touch() {
-	if !ls.Changed {
-		var newLinks = make(Links)
-		for k, v := range ls.links {
-			newLinks[k] = v
-		}
-		ls.links = newLinks
-		ls.Changed = true
-	}
-}

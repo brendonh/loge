@@ -52,11 +52,13 @@ func InitializeObject(key string, db *LogeDB, t *LogeType) *LogeObject {
 
 
 func (obj *LogeObject) NewVersion() *LogeObjectVersion {
+	var current = obj.Current
 	return &LogeObjectVersion{
-		Version: obj.Current.Version + 1,
-		Previous: obj.Current,
+		Version: current.Version + 1,
+		Previous: current,
 		TransactionCount: 0,
-		Object: copyObject(obj.Current.Object),
+		Object: copyObject(current.Object),
+		Links: current.Links.NewVersion(),
 	}
 }
 
