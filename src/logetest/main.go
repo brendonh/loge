@@ -10,14 +10,13 @@ type Person struct {
 }
 
 func main() {
-	//loge.Sandbox()
+	var db = loge.NewLogeDB(loge.NewLevelDBStore("data/logetest"))
 
-	var db = loge.NewLogeDB(loge.NewLevelDBStore())
-
-	db.CreateType("person", &Person{})
+	db.CreateType("blob", "")
 
 	db.Transact(func(trans *loge.Transaction) {
-		trans.SetObj("person", "brendon", &Person{ Name: "Brendon", Age: 31 })
+		//trans.SetObj("person", "brendon", &Person{ Name: "Brendon", Age: 31 })
+		trans.SetObj("blob", "brendon", "Hello World")
 	}, 0)
 
 	//Example(db)

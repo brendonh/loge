@@ -9,7 +9,7 @@ type LogeStore interface {
 	RegisterType(*LogeType)
 
 	Store(*LogeObject) error
-	Get(typeName string, key string) *LogeObject
+	Get(t *LogeType, key string) *LogeObject
 	Ensure (*LogeObject) *LogeObject
 }
 
@@ -41,8 +41,8 @@ func (store *MemStore) Store(obj *LogeObject) error {
 }
 
 
-func (store *MemStore) Get(typeName string, key string) *LogeObject {
-	var objMap = store.objects[typeName]
+func (store *MemStore) Get(t *LogeType, key string) *LogeObject {
+	var objMap = store.objects[t.Name]
 
 	obj, ok := objMap[key]
 	if !ok {

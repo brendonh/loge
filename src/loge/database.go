@@ -74,7 +74,7 @@ func (db *LogeDB) CreateObj(typeName string, key string) *LogeObject {
 
 
 func (db *LogeDB) GetObj(typeName string, key string) *LogeObject {
-	return db.store.Get(typeName, key)
+	return db.store.Get(db.types[typeName], key)
 }
 
 
@@ -82,6 +82,9 @@ func (db *LogeDB) EnsureObj(obj *LogeObject) *LogeObject {
 	return db.store.Ensure(obj)
 }
 
+func (db *LogeDB) StoreObj(obj *LogeObject) {
+	db.store.Store(obj)
+}
 
 func RandomLogeKey() string {
 	var buf = make([]byte, 16)

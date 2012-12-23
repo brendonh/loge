@@ -80,6 +80,7 @@ func (obj *LogeObject) ApplyVersion(version *LogeObjectVersion) {
 	version.Links.Freeze()
 	version.Previous = obj.Current
 	obj.Current = version
+	obj.DB.StoreObj(obj)
 }
 
 
@@ -110,6 +111,10 @@ func (version *LogeObjectVersion) HasValue() bool {
 
 func copyObject(object interface{}) interface{} {
 	var value = reflect.ValueOf(object)
+
+	if value.Kind() != reflect.Struct {
+		return object
+	}
 
 	if value.IsNil() {
 		return object
