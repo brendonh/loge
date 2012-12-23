@@ -4,22 +4,19 @@ import (
 	"fmt"
 	"crypto/rand"
 	"time"
-	"sync"
 )
 
 type LogeTypeMap map[string]*LogeType
-type LogeObjectMap map[string]map[string]*LogeObject
 
 type LogeDB struct {
 	types LogeTypeMap
-	objects LogeObjectMap
-	mutex sync.Mutex
+	store LogeStore
 }
 
-func NewLogeDB() *LogeDB {
+func NewLogeDB(store LogeStore) *LogeDB {
 	return &LogeDB {
 		types: make(LogeTypeMap),
-		objects: make(LogeObjectMap),
+		store: store,
 	}
 }
 
@@ -36,7 +33,7 @@ func (db *LogeDB) CreateType(name string, exemplar interface{}) *LogeType {
 		Exemplar: exemplar,
 	}
 	db.types[name] = t
-	db.objects[name] = make(map[string]*LogeObject)
+	db.store.RegisterType(t)
 	
 	return t
 }
@@ -77,45 +74,19 @@ func (db *LogeDB) CreateObj(typeName string, key string) *LogeObject {
 
 
 func (db *LogeDB) GetObj(typeName string, key string) *LogeObject {
-	var objMap = db.objects[typeName]
-
-	obj, ok := objMap[key]
-	if !ok {
-		// TODO: Loading!
-		return nil
-	}
-
-	return obj
+	return db.store.Get(typeName, key)
 }
 
 
 func (db *LogeDB) EnsureObj(obj *LogeObject) *LogeObject {
+	var existing = db.store.Get(obj.Type.Name, obj.Key)
 
-	var objMap = db.objects[obj.Type.Name]
-
-	var key = obj.Key
-
-	db.mutex.Lock()
-	defer db.mutex.Unlock()
-
-	existing, ok := objMap[key]
-
-	if ok {
+	if existing != nil {
 		return existing
 	}
 
-	objMap[key] = obj
+	db.store.Store(obj)
 	return obj
-}
-
-
-// For testing only
-func (db *LogeDB) Keys() []string {
-	var keys []string
-	for k := range db.objects {
-		keys = append(keys, k)
-	}
-	return keys
 }
 
 

@@ -17,7 +17,7 @@ func BenchmarkNoContention(b *testing.B) {
 	var procs = runtime.NumCPU()
 	var origProcs = runtime.GOMAXPROCS(procs)
 
-	var db = NewLogeDB()
+	var db = NewLogeDB(NewMemStore())
 	db.CreateType("counters", &TestCounter{})
 
 	db.Transact(func (t *Transaction) {
@@ -60,7 +60,7 @@ func BenchmarkContention(b *testing.B) {
 	var procs = runtime.NumCPU()
 	var origProcs = runtime.GOMAXPROCS(procs)
 
-	var db = NewLogeDB()
+	var db = NewLogeDB(NewMemStore())
 	db.CreateType("counters", &TestCounter{})
 
 	db.Transact(func (t *Transaction) {

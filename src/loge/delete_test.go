@@ -4,7 +4,7 @@ import "testing"
 
 
 func TestSimpleDelete(test *testing.T) {
-	var db = NewLogeDB()
+	var db = NewLogeDB(NewMemStore())
 	db.CreateType("test", &TestObj{})
 
 	db.Transact(func (t *Transaction) {
@@ -41,7 +41,7 @@ func TestSimpleDelete(test *testing.T) {
 
 
 func TestDeleteScoping(test *testing.T) {
-	var db = NewLogeDB()
+	var db = NewLogeDB(NewMemStore())
 	db.CreateType("test", &TestObj{})
 
 	db.Transact(func (t *Transaction) {

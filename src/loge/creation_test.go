@@ -8,7 +8,7 @@ type TestObj struct {
 
 
 func TestSimpleCreation(test *testing.T) {
-	var db = NewLogeDB()
+	var db = NewLogeDB(NewMemStore())
 	db.CreateType("test", &TestObj{})
 	
 	db.Transact(func(t *Transaction) {
@@ -30,7 +30,7 @@ func TestSimpleCreation(test *testing.T) {
 
 
 func TestCreationScoping(test *testing.T) {
-	var db = NewLogeDB()
+	var db = NewLogeDB(NewMemStore())
 	db.CreateType("test", &TestObj{})
 
 	var trans1 = db.CreateTransaction()
@@ -56,7 +56,7 @@ func TestCreationScoping(test *testing.T) {
 
 
 func TestOverlappingCreation(test *testing.T) {
-	var db = NewLogeDB()
+	var db = NewLogeDB(NewMemStore())
 	db.CreateType("test", &TestObj{})
 
 	var trans1 = db.CreateTransaction()
