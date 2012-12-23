@@ -10,7 +10,7 @@ type LogeStore interface {
 
 	Store(*LogeObject) error
 	Get(typeName string, key string) *LogeObject
-
+	Ensure (*LogeObject) *LogeObject
 }
 
 
@@ -36,9 +36,6 @@ func (store *MemStore) RegisterType(typ *LogeType) {
 
 
 func (store *MemStore) Store(obj *LogeObject) error {
-	store.mutex.Lock()
-	defer store.mutex.Unlock()
-
 	store.objects[obj.Type.Name][obj.Key] = obj
 	return nil
 }
@@ -52,5 +49,22 @@ func (store *MemStore) Get(typeName string, key string) *LogeObject {
 		return nil
 	}
 
+	return obj
+}
+
+
+func (store *MemStore) Ensure(obj *LogeObject) *LogeObject {
+	store.mutex.Lock()
+	defer store.mutex.Unlock()
+
+	var objMap = store.objects[obj.Type.Name]
+
+	existing, ok := objMap[obj.Key]
+
+	if ok {
+		return existing
+	}
+
+	objMap[obj.Key] = obj
 	return obj
 }

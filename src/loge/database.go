@@ -79,14 +79,7 @@ func (db *LogeDB) GetObj(typeName string, key string) *LogeObject {
 
 
 func (db *LogeDB) EnsureObj(obj *LogeObject) *LogeObject {
-	var existing = db.store.Get(obj.Type.Name, obj.Key)
-
-	if existing != nil {
-		return existing
-	}
-
-	db.store.Store(obj)
-	return obj
+	return db.store.Ensure(obj)
 }
 
 
