@@ -77,7 +77,7 @@ func (t *Transaction) DeleteObj(typeName string, key string) {
 func (t *Transaction) getObj(typeName string, key string, update bool, create bool) *InvolvedObject {
 
 	if t.State != ACTIVE {
-		panic(fmt.Sprintf("GetObj from transaction %s\n", t))
+		panic(fmt.Sprintf("GetObj from inactive transaction %s\n", t))
 	}
 
 	involved, ok := t.Objs[key]
@@ -89,13 +89,12 @@ func (t *Transaction) getObj(typeName string, key string, update bool, create bo
 		return involved
 	}
 
-	var logeObj = t.DB.GetObj(typeName, key)
-	if logeObj == nil {
-		logeObj = t.DB.CreateObj(typeName, key)
-	}
+	var logeObj = t.DB.EnsureObj(typeName, key)
 
 	logeObj.SpinLock()
 	defer logeObj.Unlock()
+
+	logeObj.RefCount++
 
 	var fromVersion = logeObj.Current.Version
 
@@ -143,7 +142,8 @@ func (t *Transaction) tryCommit() bool {
 			continue
 		}
 
-		var obj = involved.Obj.Ensure()
+		//var obj = involved.Obj.Ensure()
+		var obj = involved.Obj
 
 		if !obj.TryLock() {
 			return false
@@ -161,8 +161,8 @@ func (t *Transaction) tryCommit() bool {
 	}
 	
 	for _, involved := range writeList {
+		involved.Obj.RefCount--
 		involved.Obj.ApplyVersion(involved.Version)
-		//fmt.Printf("Wrote %d: %v\n", involved.Version.Version, involved.Obj.Current.Object)
 	}
 
 	t.State = FINISHED

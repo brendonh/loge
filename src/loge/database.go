@@ -31,6 +31,7 @@ func (db *LogeDB) CreateType(name string, exemplar interface{}) *LogeType {
 		Name: name,
 		Version: 1,
 		Exemplar: exemplar,
+		Cache: make(objCache),
 	}
 	db.types[name] = t
 	db.store.RegisterType(t)
@@ -61,26 +62,34 @@ func (db *LogeDB) Transact(actor Transactor, timeout time.Duration) bool {
 	return false
 }
 
-
-func (db *LogeDB) CreateObj(typeName string, key string) *LogeObject {
-	var lt = db.types[typeName]
-
-	if key == "" {
-		key = RandomLogeKey()
+func (db *LogeDB) EnsureObj(typeName string, key string) *LogeObject {
+	var typ = db.types[typeName]
+	
+	var obj, ok = typ.Cache[key]
+	if ok {
+		return obj
 	}
 
-	return InitializeObject(key, db, lt)
+	obj = db.store.Get(typ, key)
+
+	if obj == nil {
+		obj = InitializeObject(key, db, typ)
+	}
+
+	// Lock after the get, to hold it as briefly as possible
+	typ.Mutex.Lock()
+	defer typ.Mutex.Unlock()
+
+	// Maybe it got created while we were getting
+	obj2, ok := typ.Cache[key]
+	if ok {
+		return obj2
+	}
+
+	typ.Cache[key] = obj
+	return obj
 }
 
-
-func (db *LogeDB) GetObj(typeName string, key string) *LogeObject {
-	return db.store.Get(db.types[typeName], key)
-}
-
-
-func (db *LogeDB) EnsureObj(obj *LogeObject) *LogeObject {
-	return db.store.Ensure(obj)
-}
 
 func (db *LogeDB) StoreObj(obj *LogeObject) {
 	db.store.Store(obj)

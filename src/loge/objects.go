@@ -22,6 +22,7 @@ type LogeObject struct {
 	Type *LogeType
 	Key string
 	Locked int32
+	RefCount int32
 	Current *LogeObjectVersion
 }
 
@@ -40,6 +41,7 @@ func InitializeObject(key string, db *LogeDB, t *LogeType) *LogeObject {
 		Type: t,
 		Key: key,
 		Locked: 0,
+		RefCount: 0,
 		Current: &LogeObjectVersion{
 			Version: 0,
 			Previous: nil,
@@ -60,14 +62,6 @@ func (obj *LogeObject) NewVersion() *LogeObjectVersion {
 		Object: copyObject(current.Object),
 		Links: current.Links.NewVersion(),
 	}
-}
-
-
-func (obj *LogeObject) Ensure() *LogeObject {
-	if obj.Current.Version == 0 {
-		obj = obj.DB.EnsureObj(obj)
-	}
-	return obj
 }
 
 
@@ -112,7 +106,8 @@ func (version *LogeObjectVersion) HasValue() bool {
 func copyObject(object interface{}) interface{} {
 	var value = reflect.ValueOf(object)
 
-	if value.Kind() != reflect.Struct {
+	// Hrgh
+	if value.Kind() != reflect.Ptr || reflect.Indirect(value).Kind() != reflect.Struct {
 		return object
 	}
 
@@ -139,11 +134,10 @@ func copyObject(object interface{}) interface{} {
 				var newField = reflect.New(field.Type()).Elem()
 				newField = reflect.AppendSlice(newField, field)
 				field.Set(newField)
-			case "keep":
-				// Do nothing
-			default:
-				// Empty it
+			case "empty":
 				field.Set(reflect.New(field.Type()).Elem())
+			default:
+				// Do nothing
 			}
 		}
 	}

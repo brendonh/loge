@@ -9,10 +9,14 @@ type Person struct {
 	Age int
 }
 
+
 func main() {
 	var db = loge.NewLogeDB(loge.NewLevelDBStore("data/logetest"))
 
 	db.CreateType("blob", "")
+
+	var t = db.CreateTransaction()
+	t.ReadObj("blob", "brendon")
 
 	db.Transact(func(trans *loge.Transaction) {
 		//trans.SetObj("person", "brendon", &Person{ Name: "Brendon", Age: 31 })

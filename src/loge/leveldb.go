@@ -2,111 +2,73 @@ package loge
 
 import (
 	"fmt"
-	"sync"
-	"path/filepath"
 
 	"github.com/jmhodges/levigo"
 )
 
+const VERSION = 1
+
 type LevelDBStore struct {
-	types map[*LogeType]*LevelDBTypeStore
 	basePath string
+	db *levigo.DB
+	types map[*LogeType]*LevelDBType
 }
 
-type LevelDBTypeStore struct {
-	t *LogeType
-	db *levigo.DB
-	cache map[string]*LogeObject
-	mutex sync.Mutex
+type LevelDBType struct {
+	T *LogeType
 }
 
 var writeOptions = levigo.NewWriteOptions()
 var readOptions = levigo.NewReadOptions()
 
 func NewLevelDBStore(basePath string) *LevelDBStore {
+
+	var opts = levigo.NewOptions()
+	opts.SetCreateIfMissing(true)
+	db, err := levigo.Open(basePath, opts)
+
+	if err != nil {
+		panic(fmt.Sprintf("Can't open DB at %s: %v", basePath, err))
+	}
+
 	return &LevelDBStore {
-		types: make(map[*LogeType]*LevelDBTypeStore),
 		basePath: basePath,
+		db: db,
+		types: make(map[*LogeType]*LevelDBType),
 	}
 }
 
 func (store *LevelDBStore) RegisterType(typ *LogeType) {
 	fmt.Printf("Register: %v\n", typ)
-
-	var path = filepath.Join(store.basePath, typ.Name)
-	var opts = levigo.NewOptions()
-	opts.SetCreateIfMissing(true)
-	db, err := levigo.Open(path, opts)
-
-	if err != nil {
-		panic(fmt.Sprintf("Can't open DB at %s: %v", path, err))
-	}
-
-	store.types[typ] = &LevelDBTypeStore {
-		t: typ,
-		db: db,
-		cache: make(map[string]*LogeObject),
+	store.types[typ] = &LevelDBType {
+		T: typ,
 	}
 }
 
 func (store *LevelDBStore) Store(obj *LogeObject) error {
-	return store.types[obj.Type].Store(obj)
-}
-
-func (store *LevelDBStore) Get(typ *LogeType, key string) *LogeObject {
-	return store.types[typ].Get(key)
-}
-
-func (store *LevelDBStore) Ensure(obj *LogeObject) *LogeObject {
-	return store.types[obj.Type].Ensure(obj)
-}
-
-// ---------------------------
-
-
-func (ts *LevelDBTypeStore) Get(key string) *LogeObject {
-	// XXX TODO: Cache
-	fmt.Printf("%s get: %s\n", ts.t.Name, key)
-	val, err := ts.db.Get(readOptions, []byte(key))
-
-	if err != nil {
-		panic(fmt.Sprintf("Read error: %v\n", err))
-	}
-
-	fmt.Printf("Get got: %v\n", val)
-
-	return nil
-}
-
-func (ts *LevelDBTypeStore) Store(obj *LogeObject) error {
-	// XXX TODO: Cache, don't write version-0 objects
+	// XXX TODO: Per-type keys
 
 	var val = obj.Current.Object.(string)
-	fmt.Printf("Val: %v\n", val)
-	var err = ts.db.Put(writeOptions, []byte(obj.Key), []byte(obj.Current.Object.(string)))
+	fmt.Printf("Store: %v::%v -> %v (%v)\n", obj.Type.Name, obj.Key, val, obj.RefCount)
+
+	var err = store.db.Put(writeOptions, []byte(obj.Key), []byte(obj.Current.Object.(string)))
 	if err != nil {
 		panic(fmt.Sprintf("Write error: %v\n", err))
 	}
 	return nil
 }
 
-func (ts *LevelDBTypeStore) Ensure(obj *LogeObject) *LogeObject {
-	ts.mutex.Lock()
-	defer ts.mutex.Unlock()
 
-	fmt.Printf("%s ensure: %v\n", ts.t.Name, obj)
-
-	var existing = ts.Get(obj.Key)
-
-	if existing != nil {
-		return existing
-	}
-
-	var err = ts.Store(obj)
+func (store *LevelDBStore) Get(typ *LogeType, key string) *LogeObject {
+	val, err := store.db.Get(readOptions, []byte(key))
 
 	if err != nil {
-		panic(fmt.Sprintf("Couldn't store object: %v", err))
+		panic(fmt.Sprintf("Read error: %v\n", err))
 	}
 
-	return obj
+	fmt.Printf("Get: %v::%v: %v\n", typ.Name, key, val)
+
+	return nil
 }
+
+

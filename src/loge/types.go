@@ -2,13 +2,18 @@ package loge
 
 import (
 	"reflect"
+	"sync"
 )
+
+type objCache map[string]*LogeObject
 
 type LogeType struct {
 	Name string
 	Version int
 	Exemplar interface{}
 	LinkSpec LinkSpec
+	Mutex sync.Mutex
+	Cache objCache
 }
 
 
