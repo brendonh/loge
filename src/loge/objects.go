@@ -15,34 +15,27 @@ type LogeObject struct {
 	DB *LogeDB
 	Type *LogeType
 	Key LogeKey
-	Locked int32
-	RefCount uint16
 	Current *LogeObjectVersion
+	Locked int32
+	RefCount uint32
 }
 
 type LogeObjectVersion struct {
 	Version int
-	TransactionCount int
 	Object interface{}
 	Links *ObjectLinks
 	Previous *LogeObjectVersion
 }
 
 
-func InitializeObject(key LogeKey, db *LogeDB, t *LogeType) *LogeObject {
+func InitializeObject(db *LogeDB, t *LogeType, key LogeKey, version *LogeObjectVersion) *LogeObject {
 	return &LogeObject{
 		DB: db,
 		Type: t,
 		Key: key,
+		Current: version,
 		Locked: 0,
 		RefCount: 0,
-		Current: &LogeObjectVersion{
-			Version: 0,
-			Previous: nil,
-			TransactionCount: 0,
-			Object: t.ObjType.NilValue(),
-			Links: t.NewLinks(),
-		},
 	}
 }
 
@@ -52,7 +45,6 @@ func (obj *LogeObject) NewVersion() *LogeObjectVersion {
 	return &LogeObjectVersion{
 		Version: current.Version + 1,
 		Previous: current,
-		TransactionCount: 0,
 		Object: obj.Type.ObjType.Copy(current.Object),
 		Links: current.Links.NewVersion(),
 	}

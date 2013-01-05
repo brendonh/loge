@@ -48,10 +48,12 @@ func (store *LevelDBStore) RegisterType(typ *LogeType) {
 func (store *LevelDBStore) Store(obj *LogeObject) error {
 	// XXX TODO: Per-type keys
 
-	var val = obj.Current.Object.(string)
-	fmt.Printf("Store: %v::%v -> %v (%v)\n", obj.Type.Name, obj.Key, val, obj.RefCount)
+	var encoded = obj.Type.ObjType.Encode(obj.Current.Object)
 
-	var err = store.db.Put(writeOptions, []byte(obj.Key), []byte(obj.Current.Object.(string)))
+	fmt.Printf("Store: %v::%v -> %v (%v)\n", obj.Type.Name, obj.Key, 
+		encoded, obj.RefCount)
+
+	var err = store.db.Put(writeOptions, []byte(obj.Key), encoded)
 	if err != nil {
 		panic(fmt.Sprintf("Write error: %v\n", err))
 	}
@@ -59,16 +61,19 @@ func (store *LevelDBStore) Store(obj *LogeObject) error {
 }
 
 
-func (store *LevelDBStore) Get(typ *LogeType, key LogeKey) *LogeObject {
+func (store *LevelDBStore) Get(typ *LogeType, key LogeKey) *LogeObjectVersion {
 	val, err := store.db.Get(readOptions, []byte(key))
 
 	if err != nil {
 		panic(fmt.Sprintf("Read error: %v\n", err))
 	}
 
-	fmt.Printf("Get: %v::%v: %v\n", typ.Name, key, val)
-
-	return nil
+	return &LogeObjectVersion{
+		Version: 0,
+		Previous: nil,
+		Object: typ.ObjType.Decode(val),
+		Links: typ.NewLinks(),
+	}
 }
 
 

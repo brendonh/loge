@@ -16,15 +16,13 @@ func main() {
 
 	db.CreateType("blob", &loge.StringType{})
 
-	var t = db.CreateTransaction()
-	t.WriteObj("blob", "brendon")
-
 	db.Transact(func(trans *loge.Transaction) {
-		//trans.SetObj("person", "brendon", &Person{ Name: "Brendon", Age: 31 })
+		var prev = trans.ReadObj("blob", "brendon")
+
+		fmt.Printf("Previous: %#v\n", prev)
+
 		trans.SetObj("blob", "brendon", "Hello World")
 	}, 0)
 
-	fmt.Printf("Commit: %v\n", t.Commit())
-
-	//Example(db)
+	Example(db)
 }

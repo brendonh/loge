@@ -71,11 +71,18 @@ func (db *LogeDB) EnsureObj(typeName string, key LogeKey) *LogeObject {
 		return obj
 	}
 
-	obj = db.store.Get(typ, key)
+	var version = db.store.Get(typ, key)
 
-	if obj == nil {
-		obj = InitializeObject(key, db, typ)
+	if version == nil {
+		version = &LogeObjectVersion{
+			Version: 0,
+			Previous: nil,
+			Object: typ.ObjType.NilValue(),
+			Links: typ.NewLinks(),
+		}
 	}
+
+	obj = InitializeObject(db, typ, key, version)
 
 	// Lock after the get, to hold it as briefly as possible
 	typ.Mutex.Lock()
