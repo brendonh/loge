@@ -1,7 +1,11 @@
 package loge
 
 import (
+	"fmt"
 	"reflect"
+	"bytes"
+
+	"github.com/ugorji/go-msgpack"
 )
 
 
@@ -41,14 +45,29 @@ func (t *StructType) NilValue() interface{} {
 	return reflect.Zero(reflect.TypeOf(t.Exemplar)).Interface()
 }
 
-// XXX TODO
 func (t *StructType) Encode(val interface{}) []byte {
-	return []byte{}
+	w := bytes.NewBufferString("")
+	enc := msgpack.NewEncoder(w)
+	err := enc.Encode(val)
+
+	if err != nil {
+		panic(fmt.Sprintf("Couldn't encode object: %v", err))
+	}
+
+	return w.Bytes()
 }
 
-// XXX TODO
+
 func (t *StructType) Decode(enc []byte) interface{} {
-	return t.NilValue()
+	var target = reflect.New(reflect.TypeOf(t.Exemplar).Elem()).Interface()
+	
+	var err = msgpack.Unmarshal(enc, &target, nil)
+
+	if err != nil {
+		panic(fmt.Sprintf("Couldn't decode object: %v", err))
+	}
+	
+	return target
 }
 
 func (t *StructType) Copy(object interface{}) interface{} {
