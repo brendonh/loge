@@ -59,7 +59,7 @@ func (store *LevelDBStore) Store(obj *LogeObject) error {
 }
 
 
-func (store *LevelDBStore) Get(typ *LogeType, key string) *LogeObject {
+func (store *LevelDBStore) Get(typ *LogeType, key LogeKey) *LogeObject {
 	val, err := store.db.Get(readOptions, []byte(key))
 
 	if err != nil {

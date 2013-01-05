@@ -5,27 +5,27 @@ type LogeStore interface {
 	RegisterType(*LogeType)
 
 	Store(*LogeObject) error
-	Get(t *LogeType, key string) *LogeObject
+	Get(t *LogeType, key LogeKey) *LogeObject
 }
 
 
-type LogeObjectMap map[string]map[string]*LogeObject
+type objectMap map[string]map[LogeKey]*LogeObject
 
 
 type MemStore struct {
-	objects LogeObjectMap
+	objects objectMap
 }
 
 
 func NewMemStore() *MemStore {
 	return &MemStore{
-		objects: make(LogeObjectMap),
+		objects: make(objectMap),
 	}
 }
 
 
 func (store *MemStore) RegisterType(typ *LogeType) {
-	store.objects[typ.Name] = make(map[string]*LogeObject)
+	store.objects[typ.Name] = make(map[LogeKey]*LogeObject)
 }
 
 
@@ -35,7 +35,7 @@ func (store *MemStore) Store(obj *LogeObject) error {
 }
 
 
-func (store *MemStore) Get(t *LogeType, key string) *LogeObject {
+func (store *MemStore) Get(t *LogeType, key LogeKey) *LogeObject {
 	var objMap = store.objects[t.Name]
 
 	obj, ok := objMap[key]

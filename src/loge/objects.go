@@ -6,12 +6,6 @@ import (
 	"runtime"
 )
 
-type Logeable interface {
-	TypeName() string
-	Key() string
-}
-
-type LockState int32
 const (
 	UNLOCKED = 0
 	LOCKED = 1
@@ -20,9 +14,9 @@ const (
 type LogeObject struct {
 	DB *LogeDB
 	Type *LogeType
-	Key string
+	Key LogeKey
 	Locked int32
-	RefCount int32
+	RefCount uint16
 	Current *LogeObjectVersion
 }
 
@@ -35,7 +29,7 @@ type LogeObjectVersion struct {
 }
 
 
-func InitializeObject(key string, db *LogeDB, t *LogeType) *LogeObject {
+func InitializeObject(key LogeKey, db *LogeDB, t *LogeType) *LogeObject {
 	return &LogeObject{
 		DB: db,
 		Type: t,

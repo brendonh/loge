@@ -6,16 +6,16 @@ import (
 	"time"
 )
 
-type LogeTypeMap map[string]*LogeType
+type typeMap map[string]*LogeType
 
 type LogeDB struct {
-	types LogeTypeMap
+	types typeMap
 	store LogeStore
 }
 
 func NewLogeDB(store LogeStore) *LogeDB {
 	return &LogeDB {
-		types: make(LogeTypeMap),
+		types: make(typeMap),
 		store: store,
 	}
 }
@@ -62,7 +62,7 @@ func (db *LogeDB) Transact(actor Transactor, timeout time.Duration) bool {
 	return false
 }
 
-func (db *LogeDB) EnsureObj(typeName string, key string) *LogeObject {
+func (db *LogeDB) EnsureObj(typeName string, key LogeKey) *LogeObject {
 	var typ = db.types[typeName]
 	
 	var obj, ok = typ.Cache[key]

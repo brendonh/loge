@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt" 
 	"loge"
 )
 
@@ -16,12 +17,14 @@ func main() {
 	db.CreateType("blob", "")
 
 	var t = db.CreateTransaction()
-	t.ReadObj("blob", "brendon")
+	t.WriteObj("blob", "brendon")
 
 	db.Transact(func(trans *loge.Transaction) {
 		//trans.SetObj("person", "brendon", &Person{ Name: "Brendon", Age: 31 })
 		trans.SetObj("blob", "brendon", "Hello World")
 	}, 0)
+
+	fmt.Printf("Commit: %v\n", t.Commit())
 
 	//Example(db)
 }

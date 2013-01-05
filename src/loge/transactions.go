@@ -19,7 +19,7 @@ const (
 
 type Transaction struct {
 	DB *LogeDB
-	Objs map[string]*InvolvedObject
+	Objs map[LogeKey]*InvolvedObject
 	State TransactionState
 }
 
@@ -35,7 +35,7 @@ type InvolvedObject struct {
 func NewTransaction(db *LogeDB) *Transaction {
 	return &Transaction{
 		DB: db,
-		Objs: make(map[string]*InvolvedObject),
+		Objs: make(map[LogeKey]*InvolvedObject),
 		State: ACTIVE,
 	}
 }
@@ -46,35 +46,35 @@ func (t *Transaction) String() string {
 }
 
 
-func (t *Transaction) Exists(typeName string, key string) bool {
+func (t *Transaction) Exists(typeName string, key LogeKey) bool {
 	var obj = t.getObj(typeName, key, false, false)
 	return obj.Version.HasValue()
 }
 
 
-func (t *Transaction) ReadObj(typeName string, key string) interface{} {
+func (t *Transaction) ReadObj(typeName string, key LogeKey) interface{} {
 	return t.getObj(typeName, key, false, true).Version.Object
 }
 
 
-func (t *Transaction) WriteObj(typeName string, key string) interface{} {
+func (t *Transaction) WriteObj(typeName string, key LogeKey) interface{} {
 	return t.getObj(typeName, key, true, true).Version.Object
 }
 
 
-func (t *Transaction) SetObj(typeName string, key string, obj interface{}) {
+func (t *Transaction) SetObj(typeName string, key LogeKey, obj interface{}) {
 	var involved = t.getObj(typeName, key, true, true)
 	involved.Version.Object = obj
 }
 
 
-func (t *Transaction) DeleteObj(typeName string, key string) {
+func (t *Transaction) DeleteObj(typeName string, key LogeKey) {
 	var involved = t.getObj(typeName, key, true, false)
 	involved.Version.Object = involved.Obj.Type.NilValue()
 }
 
 
-func (t *Transaction) getObj(typeName string, key string, update bool, create bool) *InvolvedObject {
+func (t *Transaction) getObj(typeName string, key LogeKey, update bool, create bool) *InvolvedObject {
 
 	if t.State != ACTIVE {
 		panic(fmt.Sprintf("GetObj from inactive transaction %s\n", t))

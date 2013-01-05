@@ -22,7 +22,8 @@ func BenchmarkNoContention(b *testing.B) {
 
 	db.Transact(func (t *Transaction) {
 		for i := 0; i < procs; i++ {
-			t.SetObj("counters", strconv.Itoa(i), &TestCounter{Value: 0})
+			var key LogeKey = LogeKey(strconv.Itoa(i))
+			t.SetObj("counters", key, &TestCounter{Value: 0})
 		}
 	}, 0)
 
@@ -30,7 +31,7 @@ func BenchmarkNoContention(b *testing.B) {
 
 	var group sync.WaitGroup
 	for i := 0; i < procs; i++ {
-		var key = strconv.Itoa(i)
+		var key = LogeKey(strconv.Itoa(i))
 		group.Add(1)
 		go LoopIncrement(db, key, &group, b.N)
 	}
@@ -40,7 +41,7 @@ func BenchmarkNoContention(b *testing.B) {
 
 	db.Transact(func (t *Transaction) {
 		for i := 0; i < procs; i++ {
-			var key = strconv.Itoa(i)
+			var key = LogeKey(strconv.Itoa(i))
 			var counter = t.ReadObj("counters", key).(*TestCounter)
 			if counter.Value != b.N {
 				b.Errorf("Wrong count for counter %d: %d / %d", 
@@ -91,7 +92,7 @@ func BenchmarkContention(b *testing.B) {
 }
 
 
-func LoopIncrement(db *LogeDB, key string, group *sync.WaitGroup, count int) {
+func LoopIncrement(db *LogeDB, key LogeKey, group *sync.WaitGroup, count int) {
 	var actor = func(t *Transaction) { Increment(t, key) }
 	for i := 0; i < count; i++ {		
 		db.Transact(actor, 0)
@@ -100,7 +101,7 @@ func LoopIncrement(db *LogeDB, key string, group *sync.WaitGroup, count int) {
 }
 
 
-func Increment(trans *Transaction, key string) {
+func Increment(trans *Transaction, key LogeKey) {
 	var counter = trans.WriteObj("counters", key).(*TestCounter)
 	counter.Value += 1
 }

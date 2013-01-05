@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-type objCache map[string]*LogeObject
+type objCache map[LogeKey]*LogeObject
 
 type LogeType struct {
 	Name string
