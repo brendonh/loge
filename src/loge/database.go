@@ -20,7 +20,7 @@ func NewLogeDB(store LogeStore) *LogeDB {
 	}
 }
 
-func (db *LogeDB) CreateType(name string, exemplar interface{}) *LogeType {
+func (db *LogeDB) CreateType(name string, objType LogeObjectType) *LogeType {
 	_, ok := db.types[name]
 
 	if ok {
@@ -30,7 +30,8 @@ func (db *LogeDB) CreateType(name string, exemplar interface{}) *LogeType {
 	var t = &LogeType {
 		Name: name,
 		Version: 1,
-		Exemplar: exemplar,
+		ObjType: objType,
+		//Exemplar: exemplar,
 		Cache: make(objCache),
 	}
 	db.types[name] = t

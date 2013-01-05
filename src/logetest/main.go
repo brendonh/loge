@@ -14,7 +14,7 @@ type Person struct {
 func main() {
 	var db = loge.NewLogeDB(loge.NewLevelDBStore("data/logetest"))
 
-	db.CreateType("blob", "")
+	db.CreateType("blob", &loge.StringType{})
 
 	var t = db.CreateTransaction()
 	t.WriteObj("blob", "brendon")

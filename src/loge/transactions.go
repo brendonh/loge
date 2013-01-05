@@ -47,34 +47,40 @@ func (t *Transaction) String() string {
 
 
 func (t *Transaction) Exists(typeName string, key LogeKey) bool {
-	var obj = t.getObj(typeName, key, false, false)
+	var obj = t.getObj(typeName, key)
 	return obj.Version.HasValue()
 }
 
 
 func (t *Transaction) ReadObj(typeName string, key LogeKey) interface{} {
-	return t.getObj(typeName, key, false, true).Version.Object
+	return t.getObj(typeName, key).Version.Object
 }
 
 
 func (t *Transaction) WriteObj(typeName string, key LogeKey) interface{} {
-	return t.getObj(typeName, key, true, true).Version.Object
+	return t.getDirtyObj(typeName, key).Version.Object
 }
 
 
 func (t *Transaction) SetObj(typeName string, key LogeKey, obj interface{}) {
-	var involved = t.getObj(typeName, key, true, true)
+	var involved = t.getDirtyObj(typeName, key)
 	involved.Version.Object = obj
 }
 
 
 func (t *Transaction) DeleteObj(typeName string, key LogeKey) {
-	var involved = t.getObj(typeName, key, true, false)
-	involved.Version.Object = involved.Obj.Type.NilValue()
+	var involved = t.getDirtyObj(typeName, key)
+	involved.Version.Object = involved.Obj.Type.ObjType.NilValue()
 }
 
 
-func (t *Transaction) getObj(typeName string, key LogeKey, update bool, create bool) *InvolvedObject {
+func (t *Transaction) getDirtyObj(typeName string, key LogeKey) *InvolvedObject {
+	var involved = t.getObj(typeName, key)
+	involved.Dirty = true
+	return involved
+}
+
+func (t *Transaction) getObj(typeName string, key LogeKey) *InvolvedObject {
 
 	if t.State != ACTIVE {
 		panic(fmt.Sprintf("GetObj from inactive transaction %s\n", t))
@@ -83,9 +89,6 @@ func (t *Transaction) getObj(typeName string, key LogeKey, update bool, create b
 	involved, ok := t.Objs[key]
 
 	if ok {
-		if update {
-			involved.Dirty = true
-		}
 		return involved
 	}
 
@@ -102,7 +105,7 @@ func (t *Transaction) getObj(typeName string, key LogeKey, update bool, create b
 		Obj: logeObj,
 		Version: logeObj.NewVersion(),
 		FromVersion: fromVersion,
-		Dirty: update,
+		Dirty: false,
 	}
 
 	t.Objs[key] = involved

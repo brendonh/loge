@@ -7,7 +7,7 @@ import (
 )
 
 func Example(db *loge.LogeDB) {
-	db.CreateType("person", &Person{})
+	db.CreateType("person", loge.StructTypeFor(&Person{}))
 
 
 	// ------------------------------------

@@ -40,7 +40,7 @@ func InitializeObject(key LogeKey, db *LogeDB, t *LogeType) *LogeObject {
 			Version: 0,
 			Previous: nil,
 			TransactionCount: 0,
-			Object: t.NilValue(),
+			Object: t.ObjType.NilValue(),
 			Links: t.NewLinks(),
 		},
 	}
@@ -53,7 +53,7 @@ func (obj *LogeObject) NewVersion() *LogeObjectVersion {
 		Version: current.Version + 1,
 		Previous: current,
 		TransactionCount: 0,
-		Object: copyObject(current.Object),
+		Object: obj.Type.ObjType.Copy(current.Object),
 		Links: current.Links.NewVersion(),
 	}
 }
@@ -90,54 +90,7 @@ func (obj *LogeObject) Unlock() {
 	obj.Locked = UNLOCKED
 }
 
-
 func (version *LogeObjectVersion) HasValue() bool {
 	var value = reflect.ValueOf(version.Object)
 	return !value.IsNil()
 }
-
-
-func copyObject(object interface{}) interface{} {
-	var value = reflect.ValueOf(object)
-
-	// Hrgh
-	if value.Kind() != reflect.Ptr || reflect.Indirect(value).Kind() != reflect.Struct {
-		return object
-	}
-
-	if value.IsNil() {
-		return object
-	}
-
-	var orig = value.Elem()
-	var val = reflect.New(orig.Type()).Elem()
-	val.Set(orig)
-
-	var t = val.Type()
-	for i := 0; i < val.NumField(); i++ {
-
-		var field = val.Field(i)
-		var ft = t.Field(i)
-
-		switch field.Kind() {
-		case reflect.Array, 
-			reflect.Slice:
-			
-			switch ft.Tag.Get("loge") {
-			case "copy":
-				var newField = reflect.New(field.Type()).Elem()
-				newField = reflect.AppendSlice(newField, field)
-				field.Set(newField)
-			case "empty":
-				field.Set(reflect.New(field.Type()).Elem())
-			default:
-				// Do nothing
-			}
-		}
-	}
-
-	return val.Addr().Interface()
-}
-
-
-
