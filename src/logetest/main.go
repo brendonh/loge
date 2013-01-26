@@ -7,24 +7,32 @@ import (
 
 type Person struct {
 	Name string
-	Age int
+	Age uint32
+	Bits []uint16
 }
 
 
 func main() {
 	var db = loge.NewLogeDB(loge.NewLevelDBStore("data/logetest"))
 
-	db.CreateType("blob", loge.StructTypeFor(&Person{}))
+	db.CreateType("person", 2, &Person{})
 
-	db.Transact(func(trans *loge.Transaction) {
-		var prev = trans.ReadObj("blob", "brendon")
+	fmt.Printf("Done\n")
 
-		fmt.Printf("Previous: %#v\n", prev)
+	// db.Transact(func(trans *loge.Transaction) {
+	// 	var prev = trans.ReadObj("person", "brendon")
 
+	// 	fmt.Printf("Previous: %#v\n", prev)
+
+	// 	var brend = &Person{ 
+	// 		Name: "Brendon", 
+	// 		Age: 31,
+	// 		DB: db,
+	// 		Bits: []int{1,2,3},
+	// 	}
 		
-		trans.SetObj("blob", "brendon", 
-			&Person{ Name: "Brendon", Age: 31})
-	}, 0)
+	// 	trans.SetObj("person", "brendon", brend)
+	// }, 0)
 
 	//Example(db)
 }

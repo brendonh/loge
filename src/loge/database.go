@@ -20,7 +20,7 @@ func NewLogeDB(store LogeStore) *LogeDB {
 	}
 }
 
-func (db *LogeDB) CreateType(name string, objType LogeObjectType) *LogeType {
+func (db *LogeDB) CreateType(name string, version uint16, exemplar interface{}) *LogeType {
 	_, ok := db.types[name]
 
 	if ok {
@@ -29,9 +29,8 @@ func (db *LogeDB) CreateType(name string, objType LogeObjectType) *LogeType {
 
 	var t = &LogeType {
 		Name: name,
-		Version: 1,
-		ObjType: objType,
-		//Exemplar: exemplar,
+		Version: version,
+		Exemplar: exemplar,
 		Cache: make(objCache),
 	}
 	db.types[name] = t
@@ -77,7 +76,7 @@ func (db *LogeDB) EnsureObj(typeName string, key LogeKey) *LogeObject {
 		version = &LogeObjectVersion{
 			Version: 0,
 			Previous: nil,
-			Object: typ.ObjType.NilValue(),
+			Object: typ.NilValue(),
 			Links: typ.NewLinks(),
 		}
 	}

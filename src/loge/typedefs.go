@@ -4,8 +4,9 @@ type LogeKey string
 
 type LogeObjectType interface {
 	NilValue() interface{}
+	EncodeMeta() []byte
 	Encode(interface{}) []byte
-	Decode([]byte) interface{}
+	Decode([]byte, []byte) interface{}
 	Copy(interface{}) interface{}
 }
 

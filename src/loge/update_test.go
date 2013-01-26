@@ -4,7 +4,7 @@ import "testing"
 
 func TestSimpleUpdate(test *testing.T) {
 	var db = NewLogeDB(NewMemStore())
-	db.CreateType("test", StructTypeFor(&TestObj{}))
+	db.CreateType("test", 1, &TestObj{})
 
 	db.Transact(func (t *Transaction) {
 		t.SetObj("test", "one", &TestObj{Name: "One"})
@@ -26,7 +26,7 @@ func TestSimpleUpdate(test *testing.T) {
 
 func TestUpdateScoping(test *testing.T) {
 	var db = NewLogeDB(NewMemStore())
-	db.CreateType("test", StructTypeFor(&TestObj{}))
+	db.CreateType("test", 1, &TestObj{})
 
 	db.Transact(func (t *Transaction) {
 		t.SetObj("test", "one", &TestObj{Name: "One"})
@@ -66,7 +66,7 @@ func TestUpdateScoping(test *testing.T) {
 
 func _TestUpdateConflict(test *testing.T) {
 	var db = NewLogeDB(NewMemStore())
-	db.CreateType("test", StructTypeFor(&TestObj{}))
+	db.CreateType("test", 1, &TestObj{})
 
 	db.Transact(func (t *Transaction) {
 		t.SetObj("test", "one", &TestObj{Name: "One"})

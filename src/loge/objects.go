@@ -45,7 +45,7 @@ func (obj *LogeObject) NewVersion() *LogeObjectVersion {
 	return &LogeObjectVersion{
 		Version: current.Version + 1,
 		Previous: current,
-		Object: obj.Type.ObjType.Copy(current.Object),
+		Object: obj.Type.Copy(current.Object),
 		Links: current.Links.NewVersion(),
 	}
 }

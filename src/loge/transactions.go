@@ -70,7 +70,7 @@ func (t *Transaction) SetObj(typeName string, key LogeKey, obj interface{}) {
 
 func (t *Transaction) DeleteObj(typeName string, key LogeKey) {
 	var involved = t.getDirtyObj(typeName, key)
-	involved.Version.Object = involved.Obj.Type.ObjType.NilValue()
+	involved.Version.Object = involved.Obj.Type.NilValue()
 }
 
 
