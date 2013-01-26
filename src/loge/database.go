@@ -33,6 +33,7 @@ func (db *LogeDB) CreateType(name string, version uint16, exemplar interface{}) 
 		Exemplar: exemplar,
 		Cache: make(objCache),
 	}
+
 	db.types[name] = t
 	db.store.RegisterType(t)
 	

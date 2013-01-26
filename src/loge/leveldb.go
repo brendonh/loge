@@ -3,6 +3,7 @@ package loge
 import (
 	"fmt"
 	"bytes"
+	"reflect"
 
 	"github.com/brendonh/spack"
 	"github.com/jmhodges/levigo"
@@ -67,7 +68,10 @@ func (store *LevelDBStore) RegisterType(typ *LogeType) {
 	fmt.Printf("Registering: %s (%d)\n", typ.Name, typ.Version)
 
 	var vt = store.types.RegisterType(typ.Name)
-	vt.AddVersion(typ.Version, typ.Exemplar, nil)
+
+	var exemplar = reflect.ValueOf(typ.Exemplar).Elem().Interface()
+
+	vt.AddVersion(typ.Version, exemplar, nil)
 
 	if (!vt.Dirty) {
 		return
@@ -76,9 +80,7 @@ func (store *LevelDBStore) RegisterType(typ *LogeType) {
 	fmt.Printf("Updating type info: %s\n", typ.Name)
 
 	var typeType = store.types.Type("_type")
-
 	var keyVal = typeType.EncodeKey(vt.Name)
-
 	var typeVal, err = typeType.EncodeObj(vt)
 
 	if err != nil {
@@ -95,35 +97,50 @@ func (store *LevelDBStore) RegisterType(typ *LogeType) {
 }
 
 func (store *LevelDBStore) Store(obj *LogeObject) error {
-	// XXX TODO: Per-type keys
+	var vt = store.types.Type(obj.Type.Name)
+	var key = vt.EncodeKey(string(obj.Key))
+	var val, err = vt.EncodeObj(obj.Current.Object)
 
-	//var encoded = obj.Type.ObjType.Encode(obj.Current.Object)
-	var encoded = []byte{}
+	if err != nil {
+		panic(fmt.Sprintf("Encoding error: %v\n", err))
+	}
 
-	fmt.Printf("Store: %v::%v -> %v (%v)\n", obj.Type.Name, obj.Key, 
-		encoded, obj.RefCount)
+	fmt.Printf("Store: %v::%v (%v)\n", obj.Type.Name, obj.Key, obj.RefCount)
 
-	var err = store.db.Put(writeOptions, []byte(obj.Key), encoded)
+	err = store.db.Put(writeOptions, key, val)
 	if err != nil {
 		panic(fmt.Sprintf("Write error: %v\n", err))
 	}
+
 	return nil
 }
 
 
 func (store *LevelDBStore) Get(typ *LogeType, key LogeKey) *LogeObjectVersion {
-	val, err := store.db.Get(readOptions, []byte(key))
+
+	var vt = store.types.Type(typ.Name)
+	var encKey = vt.EncodeKey(string(key))
+
+	val, err := store.db.Get(readOptions, encKey)
 
 	if err != nil {
 		panic(fmt.Sprintf("Read error: %v\n", err))
 	}
 
-	fmt.Printf("Val: %v\n", val)
+	var obj interface{}
+	if val == nil {
+		obj = typ.NilValue()
+	} else {
+		obj, err = vt.DecodeObj(val)
+		if err != nil {
+			panic(fmt.Sprintf("Decode error: %v", err))
+		}
+	}
 
 	return &LogeObjectVersion{
 		Version: 0,
 		Previous: nil,
-		Object: nil, //typ.ObjType.Decode(val, []byte{}),
+		Object: obj,
 		Links: typ.NewLinks(),
 	}
 }

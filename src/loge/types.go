@@ -26,10 +26,15 @@ func (t *LogeType) NilValue() interface{} {
 }
 
 
+// XXX TODO: Do this via the store instead, and just re-decode spack objects for consistency
 func (t *LogeType) Copy(object interface{}) interface{} {
 	var value = reflect.ValueOf(object)
 
-	if value.IsNil() {
+	if value.Kind() != reflect.Ptr || reflect.Indirect(value).Kind() != reflect.Struct {
+		return object
+	}
+
+	if !value.IsValid() || value.IsNil() {
 		return object
 	}
 
