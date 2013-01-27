@@ -2,23 +2,52 @@ package loge
 
 import (
 	_ "fmt"
+	"sort"
 )
+
+
+type Links []string
+
+func (links Links) Has(key string) bool {
+	var i = sort.SearchStrings(links, key)
+	return i < len(links) && links[i] == key
+}
+
+func (links Links) Add(key string) Links {
+	if links.Has(key) {
+		return links
+	}
+
+	var newLinks = append(links, key)
+	sort.Strings(newLinks)
+	return newLinks
+}
+
+func (links Links) Remove(key string) Links {
+	var i = sort.SearchStrings(links, key)
+	if i >= len(links) || links[i] != key {
+		return links
+	}
+	return append(links[:i], links[i+1:]...)
+}
 
 
 type ObjectLinks struct {
 	sets map[string]*LinkSet
 }
 
+
 type LinkSet struct {
 	Name string
 	TypeName string
-	Previous map[string]bool
-	Current map[string]bool
+	Original Links
+	Added Links
+	Removed Links
+	Loaded bool
 }
 
-type LinkSpec map[string]string
 
-type Links map[string]bool
+type LinkSpec map[string]string
 
 
 func NewObjectLinks(spec LinkSpec) *ObjectLinks {
@@ -36,14 +65,16 @@ func NewLinkSet(name string, typeName string) *LinkSet {
 	return &LinkSet{
 		Name: name,
 		TypeName: typeName,
-		Previous: make(Links),
-		Current: make(Links),
 	}
 }
 
 
-func (ol ObjectLinks) Link(set string) *LinkSet {
-	return ol.sets[set]
+func (ol ObjectLinks) Link(setName string) *LinkSet {
+	var set = ol.sets[setName]
+	if !set.Loaded {
+		// TODO: Load from DB
+	}
+	return set
 }
 
 func (ol ObjectLinks) NewVersion() *ObjectLinks {
@@ -58,6 +89,7 @@ func (ol ObjectLinks) NewVersion() *ObjectLinks {
 	return nol
 }
 
+
 func (ol ObjectLinks) Freeze() {
 	for _, set := range ol.sets {
 		set.Freeze()
@@ -70,75 +102,56 @@ func (ls *LinkSet) NewVersion() *LinkSet {
 	return &LinkSet{
 		Name: ls.Name,
 		TypeName: ls.TypeName,
-		Previous: ls.Current,
-		Current: make(Links),
+		Original: ls.Original,
+		Loaded: ls.Loaded,
 	}
 }
 
 func (ls *LinkSet) Freeze() {
-	for k, has := range ls.Current {
-		if has {
-			ls.Previous[k] = true
-		} else {
-			delete(ls.Previous, k)
-		}
-	}
-
-	ls.Current = ls.Previous
-	ls.Previous = make(Links)
+	ls.Original = ls.ReadKeys()
+	ls.Added = nil
+	ls.Removed = nil
 }
 
 
 
 func (ls *LinkSet) Set(keys []string) {
-	ls.Current = make(Links)
-	for _, key := range keys {
-		ls.Current[key] = true
-	}
+	sort.Strings(keys)
+	ls.Removed = ls.Original
+	ls.Added = keys
 }
 
 
 func (ls *LinkSet) Add(key string) {
-	ls.Current[key] = true
+	ls.Removed = ls.Removed.Remove(key)
+	ls.Added = ls.Added.Add(key)
 }
 
 func (ls *LinkSet) Remove(key string) {
-	ls.Current[key] = false
+	ls.Added = ls.Added.Remove(key)
+	ls.Removed = ls.Removed.Add(key)
 }
 
 func (ls *LinkSet) ReadKeys() []string {
-	var roughLen = len(ls.Current) + len(ls.Previous)
+	var keys []string
 
-	var keys = make([]string, 0, roughLen)
-	var deleted = make(Links)
-
-	for k, has := range ls.Current {
-		if has {
-			keys = append(keys, k)
-		} else {
-			deleted[k] = true;
+	for _, key := range ls.Original {
+		if !ls.Removed.Has(key) {
+			keys = append(keys, key)
 		}
 	}
 
-	for k, has := range ls.Previous {
-		if has {
-			_, del := deleted[k]
-			if !del {
-				keys = append(keys, k)
-			}
-		}
-	}
+	keys = append(keys, ls.Added...)
 
+	sort.Strings(keys)
 	return keys
 }
 
 func (ls *LinkSet) Has(key string) bool {
-	has, ok := ls.Current[key]
-	if ok {
-		return has
+	if ls.Removed.Has(key) {
+		return false;
 	}
-
-	has, ok = ls.Previous[key]
-	return ok && has;
+	
+	return ls.Added.Has(key) || ls.Original.Has(key)
 }
 
