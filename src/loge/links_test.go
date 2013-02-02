@@ -6,13 +6,8 @@ import (
 )
 
 func TestLinks(t *testing.T) {
-	var spec = map[string]string {
-		"children": "obj",
-	}
 
-	var links = NewObjectLinks(spec)
-
-	var children = links.Link("children")
+	var children = NewLinkSet()
 
 	children.Add("one")
 	children.Add("two")
@@ -55,7 +50,60 @@ func TestLinks(t *testing.T) {
 	if !children.Has("four") {
 		t.Error("Key four missing")
 	}
+}
 
+func TestLinkStorage(test *testing.T) {
+	var db = NewLogeDB(NewMemStore())
+	db.CreateType("test", 1, &TestObj{}, LinkSpec{ "sibling": "test" })
+
+	db.Transact(func (t *Transaction) {
+		var links = t.ReadLinks("test", "sibling", "one")
+		if len(links) != 0 {
+			test.Errorf("Links not empty: %v", links)
+		}
+		
+		t.AddLink("test", "sibling", "one", "two")
+
+		links = t.ReadLinks("test", "sibling", "one")
+		if len(links) != 1 || links[0] != "two" {
+			test.Errorf("Links not [two]: %v", links)
+		}
+	}, 0)
+
+	db.FlushCache()
+
+	db.Transact(func (t *Transaction) {
+		var links = t.ReadLinks("test", "sibling", "one")
+		if len(links) != 1 || links[0] != "two" {
+			test.Errorf("Links not [two]: %v", links)
+		}
+	}, 0)	
+}
+
+
+func TestLinkScoping(test *testing.T) {
+	var db = NewLogeDB(NewMemStore())
+	db.CreateType("test", 1, &TestObj{}, LinkSpec{ "sibling": "test" })
+
+	var trans1 = db.CreateTransaction()
+	var trans2 = db.CreateTransaction()
+
+	trans1.AddLink("test", "sibling", "one", "one")
+
+	if trans2.HasLink("test", "sibling", "one", "one") {
+		test.Errorf("Link scope leak: %v", trans2.ReadLinks("test", "sibling", "one"));
+	}
+
+	if !trans1.Commit() {
+		test.Error("Commit failed")
+	}
+
+	db.Transact(func (t *Transaction) {
+		var links3 = t.ReadLinks("test", "sibling", "one")
+		if len(links3) != 1 || links3[0] != "one" {
+			test.Errorf("Wrong links after commit: %v", links3)
+		}
+	}, 0)
 }
 
 func compareSets(a []string, b[]string) bool {

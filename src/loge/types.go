@@ -1,25 +1,16 @@
 package loge
 
 import (
-	"sync"
 	"reflect"
 )
-
-type objCache map[LogeKey]*LogeObject
 
 type LogeType struct {
 	Name string
 	Version uint16
 	Exemplar interface{}
 	LinkSpec LinkSpec
-	Mutex sync.Mutex
-	Cache objCache
 }
 
-
-func (t *LogeType) NewLinks() *ObjectLinks {
-	return NewObjectLinks(t.LinkSpec)
-}
 
 func (t *LogeType) NilValue() interface{} {
 	return reflect.Zero(reflect.TypeOf(t.Exemplar)).Interface()

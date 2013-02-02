@@ -1,12 +1,13 @@
 package loge
 
 import (
-	_ "fmt"
 	"sort"
 )
 
-
 type Links []string
+type LinkSpec map[string]string
+
+
 
 func (links Links) Has(key string) bool {
 	var i = sort.SearchStrings(links, key)
@@ -32,80 +33,26 @@ func (links Links) Remove(key string) Links {
 }
 
 
-type ObjectLinks struct {
-	sets map[string]*LinkSet
-}
-
 
 type LinkSet struct {
-	Name string
-	TypeName string
 	Original Links
 	Added Links
 	Removed Links
-	Loaded bool
 }
 
 
-type LinkSpec map[string]string
-
-
-func NewObjectLinks(spec LinkSpec) *ObjectLinks {
-	var ol = &ObjectLinks {
-		sets: make(map[string]*LinkSet),
-	}
-	for set, typeName := range spec {
-		ol.sets[set] = NewLinkSet(set, typeName)
-	}
-	return ol
-}
-
-
-func NewLinkSet(name string, typeName string) *LinkSet {
+func NewLinkSet() *LinkSet {
 	return &LinkSet{
-		Name: name,
-		TypeName: typeName,
 	}
 }
-
-
-func (ol ObjectLinks) Link(setName string) *LinkSet {
-	var set = ol.sets[setName]
-	if !set.Loaded {
-		// TODO: Load from DB
-	}
-	return set
-}
-
-func (ol ObjectLinks) NewVersion() *ObjectLinks {
-	var nol = &ObjectLinks {
-		sets: make(map[string]*LinkSet),
-	}
-
-	for name, set := range ol.sets {
-		nol.sets[name] = set.NewVersion()
-	}
-
-	return nol
-}
-
-
-func (ol ObjectLinks) Freeze() {
-	for _, set := range ol.sets {
-		set.Freeze()
-	}
-}
-
 
 
 func (ls *LinkSet) NewVersion() *LinkSet {
 	return &LinkSet{
-		Name: ls.Name,
-		TypeName: ls.TypeName,
 		Original: ls.Original,
-		Loaded: ls.Loaded,
 	}
 }
+
 
 func (ls *LinkSet) Freeze() {
 	ls.Original = ls.ReadKeys()
@@ -124,7 +71,9 @@ func (ls *LinkSet) Set(keys []string) {
 
 func (ls *LinkSet) Add(key string) {
 	ls.Removed = ls.Removed.Remove(key)
-	ls.Added = ls.Added.Add(key)
+	if !ls.Original.Has(key) {
+		ls.Added = ls.Added.Add(key)
+	}
 }
 
 func (ls *LinkSet) Remove(key string) {

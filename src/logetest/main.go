@@ -11,11 +11,19 @@ type Person struct {
 	Bits []uint16 `loge:"copy"`
 }
 
+type Pet struct {
+	Name string
+	Species string
+}
 
 func main() {
 	var db = loge.NewLogeDB(loge.NewLevelDBStore("data/logetest"))
 
-	db.CreateType("person", 2, &Person{})
+	db.CreateType("person", 1, &Person{}, nil)
+
+	db.CreateType("pet", 1, &Pet{}, loge.LinkSpec{
+		"owner": "person",
+	})
 
 	db.Transact(func(trans *loge.Transaction) {
 		var prev = trans.ReadObj("person", "brendon").(*Person)
@@ -29,6 +37,18 @@ func main() {
 		}
 		
 		trans.SetObj("person", "brendon", &brend)
+
+		var ted = Pet{
+			Name: "Ted",
+			Species: "Hairball",
+		}
+		trans.SetObj("pet", "ted", &ted)
+
+		var owner = trans.Links("pet", "ted", "owner")
+		fmt.Printf("Owner: %v\n", owner.ReadKeys())
+
+		owner.Add("brendon")
+
 	}, 0)
 
 	//Example(db)

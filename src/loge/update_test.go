@@ -4,7 +4,7 @@ import "testing"
 
 func TestSimpleUpdate(test *testing.T) {
 	var db = NewLogeDB(NewMemStore())
-	db.CreateType("test", 1, &TestObj{})
+	db.CreateType("test", 1, &TestObj{}, nil)
 
 	db.Transact(func (t *Transaction) {
 		t.SetObj("test", "one", &TestObj{Name: "One"})
@@ -23,10 +23,26 @@ func TestSimpleUpdate(test *testing.T) {
 	}, 0)
 }
 
+func TestReadWrite(test *testing.T) {
+	var db = NewLogeDB(NewMemStore())
+	db.CreateType("test", 1, &TestObj{}, nil)
+
+	db.Transact(func (t *Transaction) {
+		t.ReadObj("test", "one")
+		t.SetObj("test", "one", &TestObj{Name: "One"})
+	}, 0)
+
+	db.Transact(func (t *Transaction) {
+		var one = t.ReadObj("test", "one").(*TestObj)
+		if one.Name != "One" {
+			test.Error("ReadWrite failed")
+		}
+	}, 0)
+}
 
 func TestUpdateScoping(test *testing.T) {
 	var db = NewLogeDB(NewMemStore())
-	db.CreateType("test", 1, &TestObj{})
+	db.CreateType("test", 1, &TestObj{}, nil)
 
 	db.Transact(func (t *Transaction) {
 		t.SetObj("test", "one", &TestObj{Name: "One"})
@@ -37,6 +53,7 @@ func TestUpdateScoping(test *testing.T) {
 	var trans1 = db.CreateTransaction()
 	var trans2 = db.CreateTransaction()
 
+	trans1.ReadObj("test", "one")
 	var one1 = trans1.WriteObj("test", "one").(*TestObj)
 	one1.Name = "One Update"
 
@@ -64,9 +81,9 @@ func TestUpdateScoping(test *testing.T) {
 }
 
 
-func _TestUpdateConflict(test *testing.T) {
+func TestUpdateConflict(test *testing.T) {
 	var db = NewLogeDB(NewMemStore())
-	db.CreateType("test", 1, &TestObj{})
+	db.CreateType("test", 1, &TestObj{}, nil)
 
 	db.Transact(func (t *Transaction) {
 		t.SetObj("test", "one", &TestObj{Name: "One"})

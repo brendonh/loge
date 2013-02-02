@@ -7,7 +7,7 @@ import (
 )
 
 func Example(db *loge.LogeDB) {
-	db.CreateType("person", 1, &Person{})
+	db.CreateType("person", 1, &Person{}, nil)
 
 
 	// ------------------------------------

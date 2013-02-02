@@ -19,23 +19,15 @@ const (
 
 type Transaction struct {
 	DB *LogeDB
-	Objs map[LogeKey]*InvolvedObject
+	Versions map[string]*LogeObjectVersion
 	State TransactionState
-}
-
-
-type InvolvedObject struct {
-	Obj *LogeObject
-	Version *LogeObjectVersion
-	FromVersion int
-	Dirty bool
 }
 
 
 func NewTransaction(db *LogeDB) *Transaction {
 	return &Transaction{
 		DB: db,
-		Objs: make(map[LogeKey]*InvolvedObject),
+		Versions: make(map[string]*LogeObjectVersion),
 		State: ACTIVE,
 	}
 }
@@ -47,70 +39,86 @@ func (t *Transaction) String() string {
 
 
 func (t *Transaction) Exists(typeName string, key LogeKey) bool {
-	var obj = t.getObj(typeName, key)
-	return obj.Version.HasValue()
+	var version = t.getObj(MakeObjRef(typeName, key), false)
+	return version.HasValue()
 }
 
 
 func (t *Transaction) ReadObj(typeName string, key LogeKey) interface{} {
-	return t.getObj(typeName, key).Version.Object
+	return t.getObj(MakeObjRef(typeName, key), false).Object
 }
 
 
 func (t *Transaction) WriteObj(typeName string, key LogeKey) interface{} {
-	return t.getDirtyObj(typeName, key).Version.Object
+	return t.getObj(MakeObjRef(typeName, key), true).Object
 }
 
 
 func (t *Transaction) SetObj(typeName string, key LogeKey, obj interface{}) {
-	var involved = t.getDirtyObj(typeName, key)
-	involved.Version.Object = obj
+	var version = t.getObj(MakeObjRef(typeName, key), true)
+	version.Object = obj
 }
 
 
 func (t *Transaction) DeleteObj(typeName string, key LogeKey) {
-	var involved = t.getDirtyObj(typeName, key)
-	involved.Version.Object = involved.Obj.Type.NilValue()
+	var version = t.getObj(MakeObjRef(typeName, key), true)
+	version.Object = version.LogeObj.Type.NilValue()
 }
 
 
-func (t *Transaction) getDirtyObj(typeName string, key LogeKey) *InvolvedObject {
-	var involved = t.getObj(typeName, key)
-	involved.Dirty = true
-	return involved
+func (t *Transaction) ReadLinks(typeName string, linkName string, key LogeKey) []string {
+	return t.getLink(MakeLinkRef(typeName, linkName, key), false).ReadKeys()
 }
 
-func (t *Transaction) getObj(typeName string, key LogeKey) *InvolvedObject {
+func (t *Transaction) HasLink(typeName string, linkName string, key LogeKey, target LogeKey) bool {
+	return t.getLink(MakeLinkRef(typeName, linkName, key), false).Has(string(target))
+}
+
+func (t *Transaction) AddLink(typeName string, linkName string, key LogeKey, target LogeKey) {
+	t.getLink(MakeLinkRef(typeName, linkName, key), true).Add(string(target))
+}
+
+func (t *Transaction) getLink(objRef ObjRef, forWrite bool) *LinkSet {
+	var version = t.getObj(objRef, forWrite)
+	return version.Object.(*LinkSet)
+}
+
+func (t *Transaction) getObj(objRef ObjRef, forWrite bool) *LogeObjectVersion {
 
 	if t.State != ACTIVE {
 		panic(fmt.Sprintf("GetObj from inactive transaction %s\n", t))
 	}
 
-	involved, ok := t.Objs[key]
+	var objKey = objRef.String()
+
+	version, ok := t.Versions[objKey]
 
 	if ok {
-		return involved
+		if forWrite {
+			if !version.Dirty {
+				version = version.LogeObj.NewVersion()
+				t.Versions[objKey] = version
+			}
+		}
+		return version
 	}
 
-	var logeObj = t.DB.EnsureObj(typeName, key)
+	var logeObj = t.DB.EnsureObj(objRef)
 
 	logeObj.SpinLock()
 	defer logeObj.Unlock()
 
 	logeObj.RefCount++
 
-	var fromVersion = logeObj.Current.Version
-
-	involved = &InvolvedObject{
-		Obj: logeObj,
-		Version: logeObj.NewVersion(),
-		FromVersion: fromVersion,
-		Dirty: false,
+	if forWrite {
+		version = logeObj.NewVersion()
+	} else {
+		version = logeObj.Current
 	}
 
-	t.Objs[key] = involved
+	t.Versions[objKey] = version
 
-	return involved
+	return version
 }
 
 
@@ -138,34 +146,34 @@ func (t *Transaction) Commit() bool {
 }
 
 func (t *Transaction) tryCommit() bool {
-	var writeList = make([]*InvolvedObject, 0, len(t.Objs))
-	
-	for _, involved := range t.Objs {
-		if involved == nil {
-			continue
-		}
-
-		//var obj = involved.Obj.Ensure()
-		var obj = involved.Obj
+	//fmt.Printf("-------------\n")
+	for _, version := range t.Versions {
+		var obj = version.LogeObj
 
 		if !obj.TryLock() {
 			return false
 		}
 		defer obj.Unlock()
 
-		if !obj.Applicable(involved.Version) {
+		var expectedVersion int
+		if version.Dirty {
+			expectedVersion = obj.Current.Version + 1
+		} else {
+			expectedVersion = obj.Current.Version
+		}
+
+		if version.Version != expectedVersion {
 			t.State = ABORTED
 			return true
 		}
-
-		if involved.Dirty {
-			writeList = append(writeList, involved)
-		}
 	}
 	
-	for _, involved := range writeList {
-		involved.Obj.RefCount--
-		involved.Obj.ApplyVersion(involved.Version)
+	for _, version := range t.Versions {
+		//fmt.Printf("Version %v\n", version)
+		version.LogeObj.RefCount--
+		if version.Dirty {
+			version.LogeObj.ApplyVersion(version)
+		}
 	}
 
 	t.State = FINISHED

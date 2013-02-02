@@ -18,22 +18,23 @@ type LogeObject struct {
 	Current *LogeObjectVersion
 	Locked int32
 	RefCount uint32
+	LinkName string
 }
 
 type LogeObjectVersion struct {
+	LogeObj *LogeObject
 	Version int
 	Object interface{}
-	Links *ObjectLinks
-	Previous *LogeObjectVersion
+	Dirty bool
 }
 
 
-func InitializeObject(db *LogeDB, t *LogeType, key LogeKey, version *LogeObjectVersion) *LogeObject {
+func InitializeObject(db *LogeDB, t *LogeType, key LogeKey) *LogeObject {
 	return &LogeObject{
 		DB: db,
 		Type: t,
 		Key: key,
-		Current: version,
+		Current: nil,
 		Locked: 0,
 		RefCount: 0,
 	}
@@ -43,10 +44,10 @@ func InitializeObject(db *LogeDB, t *LogeType, key LogeKey, version *LogeObjectV
 func (obj *LogeObject) NewVersion() *LogeObjectVersion {
 	var current = obj.Current
 	return &LogeObjectVersion{
+		LogeObj: obj,
 		Version: current.Version + 1,
-		Previous: current,
 		Object: obj.Type.Copy(current.Object),
-		Links: current.Links.NewVersion(),
+		Dirty: true,
 	}
 }
 
@@ -57,10 +58,12 @@ func (obj *LogeObject) Applicable(version *LogeObjectVersion) bool {
 
 
 func (obj *LogeObject) ApplyVersion(version *LogeObjectVersion) {
-	version.Links.Freeze()
-	version.Previous = obj.Current
 	obj.Current = version
 	obj.DB.StoreObj(obj)
+	version.Dirty = false
+	if obj.LinkName != "" {
+		version.Object.(*LinkSet).Freeze()
+	}
 }
 
 
@@ -82,7 +85,9 @@ func (obj *LogeObject) Unlock() {
 	obj.Locked = UNLOCKED
 }
 
+
 func (version *LogeObjectVersion) HasValue() bool {
 	var value = reflect.ValueOf(version.Object)
 	return !value.IsNil()
 }
+

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"bytes"
 	"reflect"
+	"encoding/binary"
 
 	"github.com/brendonh/spack"
 	"github.com/jmhodges/levigo"
@@ -11,11 +12,15 @@ import (
 
 const VERSION = 1
 
+const LINK_TAG uint16 = 2
+const START_TAG uint16 = 8
+
 type LevelDBStore struct {
 	basePath string
 	db *levigo.DB
 	types *spack.TypeSet
 	nextTypeNum int
+	linkSpec *spack.TypeSpec
 }
 
 var writeOptions = levigo.NewWriteOptions()
@@ -35,7 +40,10 @@ func NewLevelDBStore(basePath string) *LevelDBStore {
 		basePath: basePath,
 		db: db,
 		types: spack.NewTypeSet(),
+		linkSpec: spack.MakeTypeSpec([]string{}),
 	}
+
+	store.types.LastTag = START_TAG
 
 	store.LoadTypeMetadata()
 	
@@ -59,7 +67,9 @@ func (store *LevelDBStore) LoadTypeMetadata() {
 
 		store.types.LoadType(typeInfo.(*spack.VersionedType))
 
-		fmt.Printf("Loaded type: %s (%d)\n", key, store.types.Type(key).Versions[0].Version)
+		var typ = store.types.Type(key)
+
+		fmt.Printf("Loaded type: %s (#%d, v%d)\n", key, typ.Tag, typ.Versions[0].Version)
 	}
 }
 
@@ -105,18 +115,17 @@ func (store *LevelDBStore) Store(obj *LogeObject) error {
 		panic(fmt.Sprintf("Encoding error: %v\n", err))
 	}
 
-	fmt.Printf("Store: %v::%v (%v)\n", obj.Type.Name, obj.Key, obj.RefCount)
-
 	err = store.db.Put(writeOptions, key, val)
 	if err != nil {
 		panic(fmt.Sprintf("Write error: %v\n", err))
 	}
 
+	store.storeLinks(obj)
+
 	return nil
 }
 
-
-func (store *LevelDBStore) Get(typ *LogeType, key LogeKey) *LogeObjectVersion {
+func (store *LevelDBStore) Get(typ *LogeType, key LogeKey) interface{} {
 
 	var vt = store.types.Type(typ.Name)
 	var encKey = vt.EncodeKey(string(key))
@@ -137,14 +146,67 @@ func (store *LevelDBStore) Get(typ *LogeType, key LogeKey) *LogeObjectVersion {
 		}
 	}
 
-	return &LogeObjectVersion{
-		Version: 0,
-		Previous: nil,
-		Object: obj,
-		Links: typ.NewLinks(),
-	}
+	return obj
 }
 
+// -----------------------------------------------
+// Links
+// -----------------------------------------------
+
+func (store *LevelDBStore) storeLinks(obj *LogeObject) {
+	// if obj.Current.Links == nil {
+	// 	return
+	// }
+
+	// var vt = store.types.Type(obj.Type.Name)
+
+	// for name, set := range obj.Current.Links.Sets {
+	// 	if len(set.Added) == 0 && len(set.Removed) == 0 {
+	// 		continue
+	// 	}
+
+	// 	var key = linkKey(vt.Tag, name)
+	// 	enc, _ := spack.EncodeToBytes(set.ReadKeys(), store.linkSpec)
+	// 	fmt.Printf("Links %s => %v\n", name, set.ReadKeys())
+
+	// 	var err = store.db.Put(writeOptions, key, enc)
+	// 	if err != nil {
+	// 		panic(fmt.Sprintf("Write error: %v\n", err))
+	// 	}
+	// }
+}
+
+func (store *LevelDBStore) GetLinks(typ *LogeType, linkName string, objKey LogeKey) Links {
+	var vt = store.types.Type(typ.Name)
+
+	// XXX BGH TODO: Use tags for link names too
+	var lk = linkName + "^" + string(objKey)
+	var key = linkKey(vt.Tag, lk)
+
+	val, err := store.db.Get(readOptions, key)
+
+	if err != nil {
+		panic(fmt.Sprintf("Read error: %v\n", err))
+	}
+
+	if val == nil {
+		return Links{}
+	}
+
+	var links Links
+	spack.DecodeFromBytes(&links, store.linkSpec, val)
+
+	return links
+}
+
+func linkKey(typeTag uint16, key string) []byte {
+	var keyBytes = []byte(key)
+	var buf = bytes.NewBuffer(make([]byte, 0, len(keyBytes) + 4))
+	binary.Write(buf, binary.BigEndian, LINK_TAG)
+	binary.Write(buf, binary.BigEndian, typeTag)
+	buf.Write(keyBytes)
+	return buf.Bytes()
+}
 
 // -----------------------------------------------
 // Prefix iterator
