@@ -120,8 +120,6 @@ func (store *LevelDBStore) Store(obj *LogeObject) error {
 		panic(fmt.Sprintf("Write error: %v\n", err))
 	}
 
-	store.storeLinks(obj)
-
 	return nil
 }
 
@@ -153,27 +151,26 @@ func (store *LevelDBStore) Get(typ *LogeType, key LogeKey) interface{} {
 // Links
 // -----------------------------------------------
 
-func (store *LevelDBStore) storeLinks(obj *LogeObject) {
-	// if obj.Current.Links == nil {
-	// 	return
-	// }
+func (store *LevelDBStore) StoreLinks(linkObj *LogeObject) error {
+	var set = linkObj.Current.Object.(*LinkSet)
 
-	// var vt = store.types.Type(obj.Type.Name)
+	if len(set.Added) == 0 && len(set.Removed) == 0 {
+		return nil
+	}
 
-	// for name, set := range obj.Current.Links.Sets {
-	// 	if len(set.Added) == 0 && len(set.Removed) == 0 {
-	// 		continue
-	// 	}
+	var vt = store.types.Type(linkObj.Type.Name)
+	// XXX BGH TODO: Use tags for link names too
+	var lk = linkObj.LinkName + "^" + string(linkObj.Key)
+	var key = linkKey(vt.Tag, lk)
 
-	// 	var key = linkKey(vt.Tag, name)
-	// 	enc, _ := spack.EncodeToBytes(set.ReadKeys(), store.linkSpec)
-	// 	fmt.Printf("Links %s => %v\n", name, set.ReadKeys())
+	enc, _ := spack.EncodeToBytes(set.ReadKeys(), store.linkSpec)
 
-	// 	var err = store.db.Put(writeOptions, key, enc)
-	// 	if err != nil {
-	// 		panic(fmt.Sprintf("Write error: %v\n", err))
-	// 	}
-	// }
+	var err = store.db.Put(writeOptions, key, enc)
+	if err != nil {
+		panic(fmt.Sprintf("Write error: %v\n", err))
+	}
+
+	return nil
 }
 
 func (store *LevelDBStore) GetLinks(typ *LogeType, linkName string, objKey LogeKey) Links {

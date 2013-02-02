@@ -44,10 +44,10 @@ func main() {
 		}
 		trans.SetObj("pet", "ted", &ted)
 
-		var owner = trans.Links("pet", "ted", "owner")
-		fmt.Printf("Owner: %v\n", owner.ReadKeys())
+		var owner = trans.ReadLinks("pet", "owner", "ted")
+		fmt.Printf("Owner: %v\n", owner)
 
-		owner.Add("brendon")
+		trans.AddLink("pet", "owner", "ted", "brendon")
 
 	}, 0)
 
