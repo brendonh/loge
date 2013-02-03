@@ -61,6 +61,7 @@ func TestUpdateScoping(test *testing.T) {
 	two2.Name = "Two Update"
 
 	var test2 = trans1.ReadObj("test", "two").(*TestObj)
+
 	if test2.Name != "Two" {
 		test.Errorf("Update visible across transactions before commit (%v)", test2.Name)
 	}

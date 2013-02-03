@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"reflect"
 	"encoding/binary"
+	"runtime"
 
 	"github.com/brendonh/spack"
 	"github.com/jmhodges/levigo"
@@ -21,16 +22,23 @@ type LevelDBStore struct {
 	db *levigo.DB
 	types *spack.TypeSet
 
+	writeQueue chan *LevelDBWriteBatch
+	flushed bool
+
 	linkSpec *spack.TypeSpec
 	linkInfoSpec *spack.TypeSpec
 }
 
 type LevelDBWriteBatch struct {
 	store *LevelDBStore
-	batch *levigo.WriteBatch
-	count uint
+	batch []LevelDBWriteEntry
+	result chan error
 }
 
+type LevelDBWriteEntry struct {
+	Key []byte
+	Val []byte
+}
 
 var writeOptions = levigo.NewWriteOptions()
 var readOptions = levigo.NewReadOptions()
@@ -49,6 +57,10 @@ func NewLevelDBStore(basePath string) *LevelDBStore {
 		basePath: basePath,
 		db: db,
 		types: spack.NewTypeSet(),
+		
+		writeQueue: make(chan *LevelDBWriteBatch),
+		flushed: false,
+
 		linkSpec: spack.MakeTypeSpec([]string{}),
 		linkInfoSpec: spack.MakeTypeSpec(LinkInfo{}),
 	}
@@ -56,10 +68,19 @@ func NewLevelDBStore(basePath string) *LevelDBStore {
 	store.types.LastTag = START_TAG
 
 	store.LoadTypeMetadata()
+
+	go store.Writer()
 	
 	return store
 }
 
+func (store *LevelDBStore) Close() {
+	store.writeQueue <- nil
+	for !store.flushed {
+		runtime.Gosched()
+	}
+	store.db.Close()
+}
 
 func (store *LevelDBStore) LoadTypeMetadata() {
 	var typeType = store.types.Type("_type")
@@ -200,13 +221,27 @@ func (store *LevelDBStore) GetLinks(typ *LogeType, linkName string, objKey LogeK
 func (store *LevelDBStore) NewWriteBatch() LogeWriteBatch {
 	return &LevelDBWriteBatch{
 		store: store,
-		batch: levigo.NewWriteBatch(),
+		batch: make([]LevelDBWriteEntry, 0),
+		result: make(chan error),
 	}
 }
 
 // -----------------------------------------------
 // Write Batches
 // -----------------------------------------------
+
+func (store *LevelDBStore) Writer() {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	for batch := range store.writeQueue {
+		if batch == nil {
+			break
+		}
+		batch.result<- batch.Write()
+	}
+	fmt.Printf("Writer closing\n")
+	store.flushed = true
+}
 
 func (batch *LevelDBWriteBatch) Store(obj *LogeObject) error {
 	var vt = batch.store.types.Type(obj.Type.Name)
@@ -217,8 +252,7 @@ func (batch *LevelDBWriteBatch) Store(obj *LogeObject) error {
 		panic(fmt.Sprintf("Encoding error: %v\n", err))
 	}
 	
-	batch.batch.Put(key, val)
-	batch.count++
+	batch.Append(key, val)
 
 	return nil
 }
@@ -236,14 +270,28 @@ func (batch *LevelDBWriteBatch) StoreLinks(linkObj *LogeObject) error {
 	var key = encodeTaggedKey([]uint16{LINK_TAG, vt.Tag, linkInfo.Tag}, string(linkObj.Key))
 	val, _ := spack.EncodeToBytes(set.ReadKeys(), batch.store.linkSpec)
 
-	batch.batch.Put(key, val)
-	batch.count++
+	batch.Append(key, val)
 
 	return nil
 }
 
+func (batch *LevelDBWriteBatch) Append(key []byte, val []byte) {
+	batch.batch = append(batch.batch, LevelDBWriteEntry{ key, val })
+}
+
 func (batch *LevelDBWriteBatch) Commit() error {
-	return batch.store.db.Write(writeOptions, batch.batch)
+	batch.store.writeQueue <- batch
+	return <-batch.result
+}
+
+func (batch *LevelDBWriteBatch) Write() error {
+	var wb = levigo.NewWriteBatch()
+	defer wb.Close()
+	for _, entry := range batch.batch {
+		wb.Put(entry.Key, entry.Val)
+	}
+
+	return batch.store.db.Write(writeOptions, wb)
 }
 
 

@@ -39,51 +39,51 @@ func (t *Transaction) String() string {
 
 
 func (t *Transaction) Exists(typeName string, key LogeKey) bool {
-	var version = t.getObj(MakeObjRef(typeName, key), false)
+	var version = t.getObj(MakeObjRef(typeName, key), false, true)
 	return version.HasValue()
 }
 
 
 func (t *Transaction) ReadObj(typeName string, key LogeKey) interface{} {
-	return t.getObj(MakeObjRef(typeName, key), false).Object
+	return t.getObj(MakeObjRef(typeName, key), false, true).Object
 }
 
 
 func (t *Transaction) WriteObj(typeName string, key LogeKey) interface{} {
-	return t.getObj(MakeObjRef(typeName, key), true).Object
+	return t.getObj(MakeObjRef(typeName, key), true, true).Object
 }
 
 
 func (t *Transaction) SetObj(typeName string, key LogeKey, obj interface{}) {
-	var version = t.getObj(MakeObjRef(typeName, key), true)
+	var version = t.getObj(MakeObjRef(typeName, key), true, false)
 	version.Object = obj
 }
 
 
 func (t *Transaction) DeleteObj(typeName string, key LogeKey) {
-	var version = t.getObj(MakeObjRef(typeName, key), true)
+	var version = t.getObj(MakeObjRef(typeName, key), true, true)
 	version.Object = version.LogeObj.Type.NilValue()
 }
 
 
 func (t *Transaction) ReadLinks(typeName string, linkName string, key LogeKey) []string {
-	return t.getLink(MakeLinkRef(typeName, linkName, key), false).ReadKeys()
+	return t.getLink(MakeLinkRef(typeName, linkName, key), false, true).ReadKeys()
 }
 
 func (t *Transaction) HasLink(typeName string, linkName string, key LogeKey, target LogeKey) bool {
-	return t.getLink(MakeLinkRef(typeName, linkName, key), false).Has(string(target))
+	return t.getLink(MakeLinkRef(typeName, linkName, key), false, true).Has(string(target))
 }
 
 func (t *Transaction) AddLink(typeName string, linkName string, key LogeKey, target LogeKey) {
-	t.getLink(MakeLinkRef(typeName, linkName, key), true).Add(string(target))
+	t.getLink(MakeLinkRef(typeName, linkName, key), true, true).Add(string(target))
 }
 
-func (t *Transaction) getLink(objRef ObjRef, forWrite bool) *LinkSet {
-	var version = t.getObj(objRef, forWrite)
+func (t *Transaction) getLink(objRef ObjRef, forWrite bool, load bool) *LinkSet {
+	var version = t.getObj(objRef, forWrite, load)
 	return version.Object.(*LinkSet)
 }
 
-func (t *Transaction) getObj(objRef ObjRef, forWrite bool) *LogeObjectVersion {
+func (t *Transaction) getObj(objRef ObjRef, forWrite bool, load bool) *LogeObjectVersion {
 
 	if t.State != ACTIVE {
 		panic(fmt.Sprintf("GetObj from inactive transaction %s\n", t))
@@ -103,10 +103,10 @@ func (t *Transaction) getObj(objRef ObjRef, forWrite bool) *LogeObjectVersion {
 		return version
 	}
 
-	var logeObj = t.DB.EnsureObj(objRef)
+	var logeObj = t.DB.EnsureObj(objRef, load)
 
-	logeObj.SpinLock()
-	defer logeObj.Unlock()
+	logeObj.Lock.SpinLock()
+	defer logeObj.Lock.Unlock()
 
 	logeObj.RefCount++
 
@@ -150,10 +150,10 @@ func (t *Transaction) tryCommit() bool {
 	for _, version := range t.Versions {
 		var obj = version.LogeObj
 
-		if !obj.TryLock() {
+		if !obj.Lock.TryLock() {
 			return false
 		}
-		defer obj.Unlock()
+		defer obj.Lock.Unlock()
 
 		var expectedVersion int
 		if version.Dirty {

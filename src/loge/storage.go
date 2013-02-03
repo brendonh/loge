@@ -1,7 +1,8 @@
 package loge
 
-
 type LogeStore interface {
+	Close()
+
 	RegisterType(*LogeType)
 
 	Get(t *LogeType, key LogeKey) interface{}
@@ -22,6 +23,7 @@ type objectMap map[string]map[LogeKey]interface{}
 
 type MemStore struct {
 	objects objectMap
+	lock SpinLock
 }
 
 type MemStoreWriteBatch struct {
@@ -41,6 +43,8 @@ func NewMemStore() *MemStore {
 	}
 }
 
+func (store *MemStore) Close() {
+}
 
 func (store *MemStore) RegisterType(typ *LogeType) {
 	store.objects[typ.Name] = make(map[LogeKey]interface{})
@@ -102,6 +106,8 @@ func (batch *MemStoreWriteBatch) StoreLinks(obj *LogeObject) error {
 }
 
 func (batch *MemStoreWriteBatch) Commit() error {
+	batch.store.lock.SpinLock()
+	defer batch.store.lock.Unlock()
 	for _, entry := range batch.writes {
 		batch.store.objects[entry.TypeKey][entry.ObjKey] = entry.Value
 	}

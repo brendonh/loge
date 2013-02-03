@@ -2,8 +2,6 @@ package loge
 
 import (
 	"reflect"
-	"sync/atomic"
-	"runtime"
 )
 
 const (
@@ -11,14 +9,16 @@ const (
 	LOCKED = 1
 )
 
+
 type LogeObject struct {
 	DB *LogeDB
 	Type *LogeType
 	Key LogeKey
 	Current *LogeObjectVersion
-	Locked int32
 	RefCount uint32
 	LinkName string
+	Lock SpinLock
+	Loaded bool
 }
 
 type LogeObjectVersion struct {
@@ -35,8 +35,8 @@ func InitializeObject(db *LogeDB, t *LogeType, key LogeKey) *LogeObject {
 		Type: t,
 		Key: key,
 		Current: nil,
-		Locked: 0,
 		RefCount: 0,
+		Loaded: false,
 	}
 }
 
@@ -72,24 +72,6 @@ func (obj *LogeObject) ApplyVersion(version *LogeObjectVersion, batch LogeWriteB
 	}
 }
 
-
-func (obj *LogeObject) TryLock() bool {
-	return atomic.CompareAndSwapInt32(
-		&obj.Locked, UNLOCKED, LOCKED)
-}
-
-func (obj *LogeObject) SpinLock() {
-	for {
-		if obj.TryLock() {
-			return
-		}
-		runtime.Gosched()
-	}
-}
-
-func (obj *LogeObject) Unlock() {
-	obj.Locked = UNLOCKED
-}
 
 
 func (version *LogeObjectVersion) HasValue() bool {

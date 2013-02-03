@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"crypto/rand"
 	"time"
-	"sync"
 )
 
 type typeMap map[string]*LogeType
@@ -15,7 +14,7 @@ type LogeDB struct {
 	types typeMap
 	store LogeStore
 	cache objCache
-	mutex sync.Mutex
+	lock SpinLock
 }
 
 func NewLogeDB(store LogeStore) *LogeDB {
@@ -51,6 +50,10 @@ func (objRef ObjRef) IsLink() bool {
 	return objRef.LinkName != ""
 }
 
+
+func (db *LogeDB) Close() {
+	db.store.Close()
+}
 
 func (db *LogeDB) CreateType(name string, version uint16, exemplar interface{}, linkSpec LinkSpec) *LogeType {
 	_, ok := db.types[name]
@@ -103,24 +106,41 @@ func (db *LogeDB) Transact(actor Transactor, timeout time.Duration) bool {
 	return false
 }
 
-func (db *LogeDB) EnsureObj(objRef ObjRef) *LogeObject {
+func (db *LogeDB) EnsureObj(objRef ObjRef, load bool) *LogeObject {
 	var typeName = objRef.TypeName
 	var key = objRef.Key
 
 	var objKey = objRef.String()
 
 	var typ = db.types[typeName]
-	
+
+	db.lock.SpinLock()
+
 	var obj, ok = db.cache[objKey]
-	if ok {
+
+	if ok && (obj.Loaded || !load) {
+		db.lock.Unlock()
 		return obj
 	}
 
-	obj = InitializeObject(db, typ, key)
+	if !ok {
+		obj = InitializeObject(db, typ, key)
+	}
+
+	obj.Lock.SpinLock()
+	defer obj.Lock.Unlock()
+
+	db.cache[objKey] = obj	
+
+	db.lock.Unlock()
 
 	var version *LogeObjectVersion
 	if objRef.IsLink() { 
-		var links = db.store.GetLinks(typ, objRef.LinkName, key)
+		var links Links
+		if load {
+			links = db.store.GetLinks(typ, objRef.LinkName, key)
+		}
+
 		var linkSet = NewLinkSet()
 		linkSet.Original = links
 		version = &LogeObjectVersion {
@@ -129,8 +149,13 @@ func (db *LogeDB) EnsureObj(objRef ObjRef) *LogeObject {
 			Object: linkSet,
 		}
 		obj.LinkName = objRef.LinkName
+
 	} else {
-		var object = db.store.Get(typ, key)
+		var object interface{}
+		
+		if load {
+			object = db.store.Get(typ, key)
+		}
 
 		if object == nil {
 			object = typ.NilValue()
@@ -145,18 +170,6 @@ func (db *LogeDB) EnsureObj(objRef ObjRef) *LogeObject {
 	}
 
 	obj.Current = version
-
-	// Lock after the get, to hold it as briefly as possible
-	db.mutex.Lock()
-	defer db.mutex.Unlock()
-
-	// Maybe it got created while we were getting
-	obj2, ok := db.cache[objKey]
-	if ok {
-		return obj2
-	}
-
-	db.cache[objKey] = obj
 	return obj
 }
 
@@ -168,8 +181,8 @@ func (db *LogeDB) NewWriteBatch() LogeWriteBatch {
 
 func (db *LogeDB) FlushCache() int {
 	var count = 0
-	db.mutex.Lock()
-	defer db.mutex.Unlock()
+	db.lock.SpinLock()
+	defer db.lock.Unlock()
 	for key, obj := range db.cache {
 		if obj.RefCount == 0 {
 			delete(db.cache, key)
