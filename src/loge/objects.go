@@ -57,9 +57,15 @@ func (obj *LogeObject) Applicable(version *LogeObjectVersion) bool {
 }
 
 
-func (obj *LogeObject) ApplyVersion(version *LogeObjectVersion) {
+func (obj *LogeObject) ApplyVersion(version *LogeObjectVersion, batch LogeWriteBatch) {
 	obj.Current = version
-	obj.DB.StoreObj(obj)
+
+	if obj.LinkName == "" {
+		batch.Store(obj)
+	} else {
+		batch.StoreLinks(obj)
+	}
+
 	version.Dirty = false
 	if obj.LinkName != "" {
 		version.Object.(*LinkSet).Freeze()

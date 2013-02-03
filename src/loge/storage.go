@@ -1,13 +1,19 @@
 package loge
 
+
 type LogeStore interface {
 	RegisterType(*LogeType)
 
-	Store(*LogeObject) error
 	Get(t *LogeType, key LogeKey) interface{}
-
-	StoreLinks(*LogeObject) error
 	GetLinks(*LogeType, string, LogeKey) Links
+
+	NewWriteBatch() LogeWriteBatch
+}
+
+type LogeWriteBatch interface {
+	Store(*LogeObject) error
+	StoreLinks(*LogeObject) error
+	Commit() error
 }
 
 
@@ -18,6 +24,16 @@ type MemStore struct {
 	objects objectMap
 }
 
+type MemStoreWriteBatch struct {
+	store *MemStore
+	writes []MemStoreWriteEntry
+}
+
+type MemStoreWriteEntry struct {
+	TypeKey string
+	ObjKey LogeKey
+	Value interface{}
+}
 
 func NewMemStore() *MemStore {
 	return &MemStore{
@@ -29,17 +45,10 @@ func NewMemStore() *MemStore {
 func (store *MemStore) RegisterType(typ *LogeType) {
 	store.objects[typ.Name] = make(map[LogeKey]interface{})
 	for linkName := range typ.Links {
-		var lk = store.linkKey(typ.Name, linkName)
+		var lk = memStoreLinkKey(typ.Name, linkName)
 		store.objects[lk] = make(map[LogeKey]interface{})
 	}
 }
-
-
-func (store *MemStore) Store(obj *LogeObject) error {
-	store.objects[obj.Type.Name][obj.Key] = obj.Current.Object
-	return nil
-}
-
 
 func (store *MemStore) Get(t *LogeType, key LogeKey) interface{} {
 	var objMap = store.objects[t.Name]
@@ -52,15 +61,8 @@ func (store *MemStore) Get(t *LogeType, key LogeKey) interface{} {
 	return object
 }
 
-
-func (store *MemStore) StoreLinks(obj *LogeObject) error {
-	var lk = store.linkKey(obj.Type.Name, obj.LinkName)
-	store.objects[lk][obj.Key] = Links(obj.Current.Object.(*LinkSet).ReadKeys())
-	return nil
-}
-
 func (store *MemStore) GetLinks(typ *LogeType, linkName string, key LogeKey) Links {
-	var lk = store.linkKey(typ.Name, linkName)
+	var lk = memStoreLinkKey(typ.Name, linkName)
 	links, ok := store.objects[lk][key]
 	if ok {
 		return links.(Links)
@@ -69,6 +71,44 @@ func (store *MemStore) GetLinks(typ *LogeType, linkName string, key LogeKey) Lin
 	return Links{}
 }
 
-func (store *MemStore) linkKey(typeName string, linkName string) string {
+
+func (store *MemStore) NewWriteBatch() LogeWriteBatch {
+	return &MemStoreWriteBatch{
+		store: store,
+	}
+}
+
+
+func (batch *MemStoreWriteBatch) Store(obj *LogeObject) error {
+	batch.writes = append(
+		batch.writes,
+		MemStoreWriteEntry{ 
+		TypeKey: obj.Type.Name, 
+		ObjKey: obj.Key, 
+		Value: obj.Current.Object,
+	})
+	return nil
+}
+
+func (batch *MemStoreWriteBatch) StoreLinks(obj *LogeObject) error {
+	batch.writes = append(
+		batch.writes,
+		MemStoreWriteEntry{ 
+		TypeKey: memStoreLinkKey(obj.Type.Name, obj.LinkName),
+		ObjKey: obj.Key,
+		Value: Links(obj.Current.Object.(*LinkSet).ReadKeys()),
+	})
+	return nil
+}
+
+func (batch *MemStoreWriteBatch) Commit() error {
+	for _, entry := range batch.writes {
+		batch.store.objects[entry.TypeKey][entry.ObjKey] = entry.Value
+	}
+	return nil
+}
+
+
+func memStoreLinkKey(typeName string, linkName string) string {
 	return "^" + typeName + "^" + linkName
 }

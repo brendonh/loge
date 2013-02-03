@@ -167,13 +167,20 @@ func (t *Transaction) tryCommit() bool {
 			return true
 		}
 	}
-	
+
+	var batch = t.DB.NewWriteBatch()
 	for _, version := range t.Versions {
 		//fmt.Printf("Version %v\n", version)
 		version.LogeObj.RefCount--
 		if version.Dirty {
-			version.LogeObj.ApplyVersion(version)
+			version.LogeObj.ApplyVersion(version, batch)
 		}
+	}
+
+	var err = batch.Commit()
+	if err != nil {
+		t.State = ERROR
+		fmt.Printf("Commit error: %v\n", err)
 	}
 
 	t.State = FINISHED

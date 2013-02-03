@@ -86,7 +86,6 @@ func (db *LogeDB) CreateTransaction() *Transaction {
 	return NewTransaction(db)
 }
 
-
 type Transactor func(*Transaction)
 
 func (db *LogeDB) Transact(actor Transactor, timeout time.Duration) bool {
@@ -162,12 +161,8 @@ func (db *LogeDB) EnsureObj(objRef ObjRef) *LogeObject {
 }
 
 
-func (db *LogeDB) StoreObj(obj *LogeObject) {
-	if obj.LinkName == "" {
-		db.store.Store(obj)
-	} else {
-		db.store.StoreLinks(obj)
-	}
+func (db *LogeDB) NewWriteBatch() LogeWriteBatch {
+	return db.store.NewWriteBatch()
 }
 
 
