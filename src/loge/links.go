@@ -7,7 +7,11 @@ import (
 type Links []string
 type LinkSpec map[string]string
 
-
+type LinkInfo struct {
+	Name string
+	Target string
+	Tag uint16
+}
 
 func (links Links) Has(key string) bool {
 	var i = sort.SearchStrings(links, key)

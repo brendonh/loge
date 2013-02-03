@@ -28,7 +28,7 @@ func NewMemStore() *MemStore {
 
 func (store *MemStore) RegisterType(typ *LogeType) {
 	store.objects[typ.Name] = make(map[LogeKey]interface{})
-	for linkName := range typ.LinkSpec {
+	for linkName := range typ.Links {
 		var lk = store.linkKey(typ.Name, linkName)
 		store.objects[lk] = make(map[LogeKey]interface{})
 	}

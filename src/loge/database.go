@@ -59,11 +59,20 @@ func (db *LogeDB) CreateType(name string, version uint16, exemplar interface{}, 
 		panic(fmt.Sprintf("Type exists: '%s'", name))
 	}
 
+	var linkInfo = make(map[string]*LinkInfo)
+	for k, v := range linkSpec {
+		linkInfo[k] = &LinkInfo {
+			Name: k,
+			Target: v,
+			Tag: 0,
+		}
+	}
+
 	var t = &LogeType {
 		Name: name,
 		Version: version,
 		Exemplar: exemplar,
-		LinkSpec: linkSpec,
+		Links: linkInfo,
 	}
 
 	db.types[name] = t

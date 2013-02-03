@@ -8,7 +8,7 @@ type LogeType struct {
 	Name string
 	Version uint16
 	Exemplar interface{}
-	LinkSpec LinkSpec
+	Links map[string]*LinkInfo
 }
 
 

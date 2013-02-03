@@ -23,6 +23,7 @@ func main() {
 
 	db.CreateType("pet", 1, &Pet{}, loge.LinkSpec{
 		"owner": "person",
+		"friend": "pet",
 	})
 
 	db.Transact(func(trans *loge.Transaction) {

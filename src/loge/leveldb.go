@@ -13,6 +13,7 @@ import (
 const VERSION = 1
 
 const LINK_TAG uint16 = 2
+const LINK_INFO_TAG uint16 = 3
 const START_TAG uint16 = 8
 
 type LevelDBStore struct {
@@ -21,6 +22,7 @@ type LevelDBStore struct {
 	types *spack.TypeSet
 	nextTypeNum int
 	linkSpec *spack.TypeSpec
+	linkInfoSpec *spack.TypeSpec
 }
 
 var writeOptions = levigo.NewWriteOptions()
@@ -41,6 +43,7 @@ func NewLevelDBStore(basePath string) *LevelDBStore {
 		db: db,
 		types: spack.NewTypeSet(),
 		linkSpec: spack.MakeTypeSpec([]string{}),
+		linkInfoSpec: spack.MakeTypeSpec(LinkInfo{}),
 	}
 
 	store.types.LastTag = START_TAG
@@ -58,7 +61,6 @@ func (store *LevelDBStore) LoadTypeMetadata() {
 	defer it.Close()
 
 	for it = it; it.Valid(); it.Next() {
-		var key = typeType.DecodeKey(it.Key())
 		var typeInfo, err = typeType.DecodeObj(it.Value())
 
 		if err != nil {
@@ -66,22 +68,19 @@ func (store *LevelDBStore) LoadTypeMetadata() {
 		}
 
 		store.types.LoadType(typeInfo.(*spack.VersionedType))
-
-		var typ = store.types.Type(key)
-
-		fmt.Printf("Loaded type: %s (#%d, v%d)\n", key, typ.Tag, typ.Versions[0].Version)
 	}
 }
 
 
 func (store *LevelDBStore) RegisterType(typ *LogeType) {
-	fmt.Printf("Registering: %s (%d)\n", typ.Name, typ.Version)
 
 	var vt = store.types.RegisterType(typ.Name)
 
 	var exemplar = reflect.ValueOf(typ.Exemplar).Elem().Interface()
 
 	vt.AddVersion(typ.Version, exemplar, nil)
+
+	store.tagVersions(vt, typ)
 
 	if (!vt.Dirty) {
 		return
@@ -105,6 +104,45 @@ func (store *LevelDBStore) RegisterType(typ *LogeType) {
 
 	vt.Dirty = false
 }
+
+func (store *LevelDBStore) tagVersions(vt *spack.VersionedType, typ *LogeType) {
+	var prefix = encodeTaggedKey([]uint16{LINK_INFO_TAG, vt.Tag}, "")
+	var it = store.iteratePrefix(prefix)
+	defer it.Close()
+
+	for it = it; it.Valid(); it.Next() {
+		var info = &LinkInfo{}
+		spack.DecodeFromBytes(info, store.linkInfoSpec, it.Value())
+		typ.Links[info.Name] = info
+	}
+
+
+	var maxTag uint16 = 0;
+	var missing = make([]*LinkInfo, 0)
+
+	for _, info := range typ.Links {
+		if info.Tag > maxTag {
+			maxTag = info.Tag
+		}
+		if info.Tag == 0 {
+			missing = append(missing, info)
+		}
+	}
+
+	for _, info := range missing {
+		maxTag++
+		info.Tag = maxTag
+		var key = encodeTaggedKey([]uint16{LINK_INFO_TAG, vt.Tag}, info.Name)
+		enc, _ := spack.EncodeToBytes(info, store.linkInfoSpec)
+		fmt.Printf("Updating link: %s::%s (%d)\n", typ.Name, info.Name, info.Tag)
+		var err = store.db.Put(writeOptions, key, enc)
+		if err != nil {
+			panic(fmt.Sprintf("Write error: %v\n", err))
+		}
+	}
+
+}
+
 
 func (store *LevelDBStore) Store(obj *LogeObject) error {
 	var vt = store.types.Type(obj.Type.Name)
@@ -159,9 +197,9 @@ func (store *LevelDBStore) StoreLinks(linkObj *LogeObject) error {
 	}
 
 	var vt = store.types.Type(linkObj.Type.Name)
-	// XXX BGH TODO: Use tags for link names too
-	var lk = linkObj.LinkName + "^" + string(linkObj.Key)
-	var key = linkKey(vt.Tag, lk)
+	var linkInfo = linkObj.Type.Links[linkObj.LinkName]
+
+	var key = encodeTaggedKey([]uint16{LINK_TAG, vt.Tag, linkInfo.Tag}, string(linkObj.Key))
 
 	enc, _ := spack.EncodeToBytes(set.ReadKeys(), store.linkSpec)
 
@@ -176,9 +214,8 @@ func (store *LevelDBStore) StoreLinks(linkObj *LogeObject) error {
 func (store *LevelDBStore) GetLinks(typ *LogeType, linkName string, objKey LogeKey) Links {
 	var vt = store.types.Type(typ.Name)
 
-	// XXX BGH TODO: Use tags for link names too
-	var lk = linkName + "^" + string(objKey)
-	var key = linkKey(vt.Tag, lk)
+	var linkInfo = typ.Links[linkName]
+	var key = encodeTaggedKey([]uint16{LINK_TAG, vt.Tag, linkInfo.Tag}, string(objKey))
 
 	val, err := store.db.Get(readOptions, key)
 
@@ -196,11 +233,12 @@ func (store *LevelDBStore) GetLinks(typ *LogeType, linkName string, objKey LogeK
 	return links
 }
 
-func linkKey(typeTag uint16, key string) []byte {
+func encodeTaggedKey(tags []uint16, key string) []byte {
 	var keyBytes = []byte(key)
-	var buf = bytes.NewBuffer(make([]byte, 0, len(keyBytes) + 4))
-	binary.Write(buf, binary.BigEndian, LINK_TAG)
-	binary.Write(buf, binary.BigEndian, typeTag)
+	var buf = bytes.NewBuffer(make([]byte, 0, len(keyBytes) + (2 * len(tags))))
+	for _, tag := range tags {
+		binary.Write(buf, binary.BigEndian, tag)
+	}
 	buf.Write(keyBytes)
 	return buf.Bytes()
 }
