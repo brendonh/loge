@@ -115,7 +115,6 @@ func (db *LogeDB) EnsureObj(objRef ObjRef, load bool) *LogeObject {
 	var typ = db.types[typeName]
 
 	db.lock.SpinLock()
-
 	var obj, ok = db.cache[objKey]
 
 	if ok && (obj.Loaded || !load) {
@@ -139,6 +138,7 @@ func (db *LogeDB) EnsureObj(objRef ObjRef, load bool) *LogeObject {
 		var links Links
 		if load {
 			links = db.store.GetLinks(typ, objRef.LinkName, key)
+			obj.Loaded = true
 		}
 
 		var linkSet = NewLinkSet()
@@ -155,6 +155,7 @@ func (db *LogeDB) EnsureObj(objRef ObjRef, load bool) *LogeObject {
 		
 		if load {
 			object = db.store.Get(typ, key)
+			obj.Loaded = true
 		}
 
 		if object == nil {
