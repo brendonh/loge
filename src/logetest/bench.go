@@ -5,24 +5,13 @@ import (
 	"fmt"
 	"time"
 	"runtime"
-	_ "runtime/pprof"
-	_ "os"
 )
 
 const TOTAL = 1000000
 const BATCH_SIZE = 10000
 
 func WriteBench() {
-	// f, err := os.Create("bench.prof")
-    // if err != nil {
-	// 	fmt.Printf("Oh no: %v\n", err)
-	// 	return
-    // }
-    // pprof.StartCPUProfile(f)
-    // defer pprof.StopCPUProfile()
-
 	var db = loge.NewLogeDB(loge.NewLevelDBStore("data/bench"))
-	//var db = loge.NewLogeDB(loge.NewMemStore())
 
 	defer db.Close()
 

@@ -39,7 +39,7 @@ func (links Links) Remove(key string) Links {
 
 
 type LinkSet struct {
-	Original Links
+	Original Links `loge:"keep"`
 	Added Links
 	Removed Links
 }
@@ -67,7 +67,8 @@ func (ls *LinkSet) Freeze() {
 
 
 func (ls *LinkSet) Set(keys []string) {
-	sort.Strings(keys)
+	// XXX BGH TODO: Delta this
+	sort.Strings(keys)	
 	ls.Removed = ls.Original
 	ls.Added = keys
 }
@@ -81,6 +82,11 @@ func (ls *LinkSet) Add(key string) {
 }
 
 func (ls *LinkSet) Remove(key string) {
+	// XXX BGH Hrgh
+	if (!ls.Original.Has(key) && !ls.Added.Has(key)) || ls.Removed.Has(key) {
+		return
+	}
+
 	ls.Added = ls.Added.Remove(key)
 	ls.Removed = ls.Removed.Add(key)
 }

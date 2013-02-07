@@ -78,6 +78,20 @@ func (t *Transaction) AddLink(typeName string, linkName string, key LogeKey, tar
 	t.getLink(MakeLinkRef(typeName, linkName, key), true, true).Add(string(target))
 }
 
+func (t *Transaction) RemoveLink(typeName string, linkName string, key LogeKey, target LogeKey) {
+	t.getLink(MakeLinkRef(typeName, linkName, key), true, true).Remove(string(target))
+}
+
+func (t *Transaction) SetLinks(typeName string, linkName string, key LogeKey, targets []LogeKey) {
+	// XXX BGH: Yargh
+	var stringTargets = make([]string, 0, len(targets))
+	for _, key := range targets {
+		stringTargets = append(stringTargets, string(key))
+	}
+	t.getLink(MakeLinkRef(typeName, linkName, key), true, true).Set(stringTargets)
+}
+
+
 func (t *Transaction) getLink(objRef ObjRef, forWrite bool, load bool) *LinkSet {
 	var version = t.getObj(objRef, forWrite, load)
 	return version.Object.(*LinkSet)

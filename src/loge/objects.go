@@ -43,10 +43,13 @@ func InitializeObject(db *LogeDB, t *LogeType, key LogeKey) *LogeObject {
 
 func (obj *LogeObject) NewVersion() *LogeObjectVersion {
 	var current = obj.Current
+
+	var newObj = obj.Type.Copy(current.Object)
+
 	return &LogeObjectVersion{
 		LogeObj: obj,
 		Version: current.Version + 1,
-		Object: obj.Type.Copy(current.Object),
+		Object: newObj,
 		Dirty: true,
 	}
 }

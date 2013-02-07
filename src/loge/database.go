@@ -111,7 +111,6 @@ func (db *LogeDB) EnsureObj(objRef ObjRef, load bool) *LogeObject {
 	var key = objRef.Key
 
 	var objKey = objRef.String()
-
 	var typ = db.types[typeName]
 
 	db.lock.SpinLock()

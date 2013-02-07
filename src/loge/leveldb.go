@@ -15,6 +15,7 @@ const VERSION = 1
 
 const LINK_TAG uint16 = 2
 const LINK_INFO_TAG uint16 = 3
+const INDEX_TAG uint16 = 4
 const START_TAG uint16 = 8
 
 type LevelDBStore struct {
@@ -38,6 +39,7 @@ type LevelDBWriteBatch struct {
 type LevelDBWriteEntry struct {
 	Key []byte
 	Val []byte
+	Delete bool
 }
 
 var writeOptions = levigo.NewWriteOptions()
@@ -199,7 +201,11 @@ func (store *LevelDBStore) Get(typ *LogeType, key LogeKey) interface{} {
 func (store *LevelDBStore) GetLinks(typ *LogeType, linkName string, objKey LogeKey) Links {
 	var vt = store.types.Type(typ.Name)
 
-	var linkInfo = typ.Links[linkName]
+	var linkInfo, ok = typ.Links[linkName]
+	if !ok {
+		panic(fmt.Sprintf("Link info missing for %s", linkName))
+	}
+
 	var key = encodeTaggedKey([]uint16{LINK_TAG, vt.Tag, linkInfo.Tag}, string(objKey))
 
 	val, err := store.db.Get(readOptions, key)
@@ -239,7 +245,6 @@ func (store *LevelDBStore) Writer() {
 		}
 		batch.result<- batch.Write()
 	}
-	fmt.Printf("Writer closing\n")
 	store.flushed = true
 }
 
@@ -272,11 +277,29 @@ func (batch *LevelDBWriteBatch) StoreLinks(linkObj *LogeObject) error {
 
 	batch.Append(key, val)
 
+	var prefix = append(
+		encodeTaggedKey([]uint16{INDEX_TAG, vt.Tag, linkInfo.Tag}, string(linkObj.Key)),
+		0)
+
+	for _, target := range set.Added {
+		var key = append(prefix, []byte(target)...)
+		batch.Append(key, []byte{})
+	}
+
+	for _, target := range set.Removed {
+		var key = append(prefix, []byte(target)...)
+		batch.Delete(key)
+	}
+
 	return nil
 }
 
 func (batch *LevelDBWriteBatch) Append(key []byte, val []byte) {
-	batch.batch = append(batch.batch, LevelDBWriteEntry{ key, val })
+	batch.batch = append(batch.batch, LevelDBWriteEntry{ key, val, false })
+}
+
+func (batch *LevelDBWriteBatch) Delete(key []byte) {
+	batch.batch = append(batch.batch, LevelDBWriteEntry{ key, nil, true })
 }
 
 func (batch *LevelDBWriteBatch) Commit() error {
@@ -288,7 +311,11 @@ func (batch *LevelDBWriteBatch) Write() error {
 	var wb = levigo.NewWriteBatch()
 	defer wb.Close()
 	for _, entry := range batch.batch {
-		wb.Put(entry.Key, entry.Val)
+		if entry.Delete {
+			wb.Delete(entry.Key)
+		} else {
+			wb.Put(entry.Key, entry.Val)
+		}
 	}
 
 	return batch.store.db.Write(writeOptions, wb)
