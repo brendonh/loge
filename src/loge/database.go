@@ -202,7 +202,3 @@ func (db *LogeDB) ensureObj(ref objRef, load bool) *logeObject {
 }
 
 
-func (db *LogeDB) newWriteBatch() writeBatch {
-	return db.store.newWriteBatch()
-}
-

@@ -48,13 +48,13 @@ func (obj *logeObject) newVersion() *objectVersion {
 	}
 }
 
-func (obj *logeObject) applyVersion(version *objectVersion, batch writeBatch) {
+func (obj *logeObject) applyVersion(version *objectVersion, context storeContext) {
 	obj.Current = version
 
 	if obj.LinkName == "" {
-		batch.Store(obj)
+		context.store(obj)
 	} else {
-		batch.StoreLinks(obj)
+		context.storeLinks(obj)
 	}
 
 	version.Dirty = false

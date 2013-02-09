@@ -187,7 +187,7 @@ func (t *Transaction) tryCommit() bool {
 		}
 	}
 
-	var batch = t.db.newWriteBatch()
+	var batch = t.db.store.newContext()
 	for _, version := range t.versions {
 		version.LogeObj.RefCount--
 		if version.Dirty {
@@ -195,7 +195,7 @@ func (t *Transaction) tryCommit() bool {
 		}
 	}
 
-	var err = batch.Commit()
+	var err = batch.commit()
 	if err != nil {
 		t.state = ERROR
 		fmt.Printf("Commit error: %v\n", err)

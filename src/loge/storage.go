@@ -1,13 +1,11 @@
 package loge
 
-type LogeStore interface {
-	get(t *logeType, key LogeKey) interface{}
-	getLinks(*logeType, string, LogeKey) []string
-	find(*logeType, string, LogeKey) ResultSet
-	close()
 
+type LogeStore interface {
+	storeContext
+	close()
 	registerType(*logeType)
-	newWriteBatch() writeBatch
+	newContext() transactionContext
 }
 
 type ResultSet interface {
@@ -16,12 +14,18 @@ type ResultSet interface {
 	Close()
 }
 
-type writeBatch interface {
-	Store(*logeObject) error
-	StoreLinks(*logeObject) error
-	Commit() error
+type storeContext interface {
+	get(*logeType, LogeKey) interface{}
+	getLinks(*logeType, string, LogeKey) []string
+	find(*logeType, string, LogeKey) ResultSet
+	store(*logeObject) error
+	storeLinks(*logeObject) error
 }
 
+type transactionContext interface {
+	storeContext
+	commit() error
+}
 
 type objectMap map[string]map[LogeKey]interface{}
 
@@ -31,8 +35,8 @@ type memStore struct {
 	lock spinLock
 }
 
-type memWriteBatch struct {
-	store *memStore
+type memContext struct {
+	mstore *memStore
 	writes []memWriteEntry
 }
 
@@ -61,12 +65,10 @@ func (store *memStore) registerType(typ *logeType) {
 
 func (store *memStore) get(t *logeType, key LogeKey) interface{} {
 	var objMap = store.objects[t.Name]
-
 	object, ok := objMap[key]
 	if !ok {
 		return nil
 	}
-
 	return object
 }
 
@@ -85,16 +87,40 @@ func (store *memStore) find(typ *logeType, linkName string, key LogeKey) ResultS
 	panic("Find not implemented on memstore")
 }
 
-func (store *memStore) newWriteBatch() writeBatch {
-	return &memWriteBatch{
-		store: store,
+func (store *memStore) store(obj *logeObject) error {
+	obj.Lock.SpinLock()
+	defer obj.Lock.Unlock()
+	store.objects[obj.Type.Name][obj.Key] = obj.Current.Object
+	return nil
+}
+
+func (store *memStore) storeLinks(obj *logeObject) error {
+	obj.Lock.SpinLock()
+	defer obj.Lock.Unlock()
+	var typeKey = memStoreLinkKey(obj.Type.Name, obj.LinkName)
+	var val = linkList(obj.Current.Object.(*linkSet).ReadKeys())
+	store.objects[typeKey][obj.Key] = val
+	return nil
+}
+
+func (store *memStore) newContext() transactionContext {
+	return &memContext{
+		mstore: store,
 	}
 }
 
 
-func (batch *memWriteBatch) Store(obj *logeObject) error {
-	batch.writes = append(
-		batch.writes,
+func (context *memContext) get(t *logeType, key LogeKey) interface{} {
+	return context.mstore.get(t, key)
+}
+
+func (context *memContext) getLinks(t *logeType, linkName string, key LogeKey) []string {
+	return context.mstore.getLinks(t, linkName, key)
+}
+
+func (context *memContext) store(obj *logeObject) error {
+	context.writes = append(
+		context.writes,
 		memWriteEntry{ 
 		TypeKey: obj.Type.Name, 
 		ObjKey: obj.Key, 
@@ -103,9 +129,9 @@ func (batch *memWriteBatch) Store(obj *logeObject) error {
 	return nil
 }
 
-func (batch *memWriteBatch) StoreLinks(obj *logeObject) error {
-	batch.writes = append(
-		batch.writes,
+func (context *memContext) storeLinks(obj *logeObject) error {
+	context.writes = append(
+		context.writes,
 		memWriteEntry{ 
 		TypeKey: memStoreLinkKey(obj.Type.Name, obj.LinkName),
 		ObjKey: obj.Key,
@@ -114,11 +140,17 @@ func (batch *memWriteBatch) StoreLinks(obj *logeObject) error {
 	return nil
 }
 
-func (batch *memWriteBatch) Commit() error {
-	batch.store.lock.SpinLock()
-	defer batch.store.lock.Unlock()
-	for _, entry := range batch.writes {
-		batch.store.objects[entry.TypeKey][entry.ObjKey] = entry.Value
+func (context *memContext) find(typ *logeType, linkName string, key LogeKey) ResultSet {
+	// Until I can be bothered
+	panic("Find not implemented on memstore")
+}
+
+func (context *memContext) commit() error {
+	var store = context.mstore
+	store.lock.SpinLock()
+	defer store.lock.Unlock()
+	for _, entry := range context.writes {
+		store.objects[entry.TypeKey][entry.ObjKey] = entry.Value
 	}
 	return nil
 }
