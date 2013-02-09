@@ -8,6 +8,8 @@ type LogeStore interface {
 	Get(t *LogeType, key LogeKey) interface{}
 	GetLinks(*LogeType, string, LogeKey) Links
 
+	Find(*LogeType, string, LogeKey) ResultSet
+
 	NewWriteBatch() LogeWriteBatch
 }
 
@@ -17,6 +19,11 @@ type LogeWriteBatch interface {
 	Commit() error
 }
 
+type ResultSet interface {
+	Next() LogeKey
+	Valid() bool
+	Close()
+}
 
 type objectMap map[string]map[LogeKey]interface{}
 
@@ -75,6 +82,10 @@ func (store *MemStore) GetLinks(typ *LogeType, linkName string, key LogeKey) Lin
 	return Links{}
 }
 
+func (store *MemStore) Find(typ *LogeType, linkName string, key LogeKey) ResultSet {
+	// Until I can be bothered
+	panic("Find not implemented on memstore")
+}
 
 func (store *MemStore) NewWriteBatch() LogeWriteBatch {
 	return &MemStoreWriteBatch{

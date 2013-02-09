@@ -12,8 +12,9 @@ type Pet struct {
 }
 
 func main() {
+	LinkBench()
 	//LinkSandbox()
 	//WriteBench()
-	Sandbox()
+	//Sandbox()
 	//Example()
 }

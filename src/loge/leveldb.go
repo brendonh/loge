@@ -30,6 +30,13 @@ type LevelDBStore struct {
 	linkInfoSpec *spack.TypeSpec
 }
 
+type LevelDBResultSet struct {
+	it *prefixIterator
+	prefixLen int
+	next string
+	closed bool
+}
+
 type LevelDBWriteBatch struct {
 	store *LevelDBStore
 	batch []LevelDBWriteEntry
@@ -224,6 +231,67 @@ func (store *LevelDBStore) GetLinks(typ *LogeType, linkName string, objKey LogeK
 	return links
 }
 
+
+// -----------------------------------------------
+// Search
+// -----------------------------------------------
+
+func (store *LevelDBStore) Find(typ *LogeType, linkName string, target LogeKey) ResultSet {
+	var vt = store.types.Type(typ.Name)
+	var linkInfo = typ.Links[linkName]
+
+	var prefix = append(
+		encodeTaggedKey([]uint16{INDEX_TAG, vt.Tag, linkInfo.Tag}, string(target)),
+		0)
+
+	var it = store.iteratePrefix(prefix)
+	if !it.Valid() {
+		it.Close()
+		return &LevelDBResultSet {
+			closed: true,
+		}
+	}
+
+	var prefixLen = len(prefix)
+
+	var next = string(it.Key()[prefixLen:])
+
+	return &LevelDBResultSet{
+		it: it,
+		prefixLen: prefixLen,
+		next: next,
+		closed: false,
+	}
+}
+
+func (rs *LevelDBResultSet) Valid() bool {
+	return !rs.closed
+}
+
+func (rs *LevelDBResultSet) Next() LogeKey {
+	if rs.closed {
+		return ""
+	}
+	var next = rs.next
+	rs.it.Next()
+	if rs.it.Valid() {
+		rs.next = string(rs.it.Key()[rs.prefixLen:])
+	} else {
+		rs.Close()
+	}
+	return LogeKey(next)
+}
+
+func (rs *LevelDBResultSet) Close() {
+	rs.it.Close()
+	rs.closed = true
+}
+
+
+// -----------------------------------------------
+// Write Batches
+// -----------------------------------------------
+
 func (store *LevelDBStore) NewWriteBatch() LogeWriteBatch {
 	return &LevelDBWriteBatch{
 		store: store,
@@ -231,10 +299,6 @@ func (store *LevelDBStore) NewWriteBatch() LogeWriteBatch {
 		result: make(chan error),
 	}
 }
-
-// -----------------------------------------------
-// Write Batches
-// -----------------------------------------------
 
 func (store *LevelDBStore) Writer() {
 	runtime.LockOSThread()
@@ -283,19 +347,19 @@ func (batch *LevelDBWriteBatch) StoreLinks(linkObj *LogeObject) error {
 
 	batch.Append(key, val)
 
-	var prefix = append(
-		encodeTaggedKey([]uint16{INDEX_TAG, vt.Tag, linkInfo.Tag}, string(linkObj.Key)),
-		0)
+	var prefix = encodeTaggedKey([]uint16{INDEX_TAG, vt.Tag, linkInfo.Tag}, "")
+	var source = string(linkObj.Key)
+
+	for _, target := range set.Removed {
+		var key = encodeIndexKey(prefix, target, source)
+		batch.Delete(key)
+	}
 
 	for _, target := range set.Added {
-		var key = append(prefix, []byte(target)...)
+		var key = encodeIndexKey(prefix, target, source)
 		batch.Append(key, []byte{})
 	}
 
-	for _, target := range set.Removed {
-		var key = append(prefix, []byte(target)...)
-		batch.Delete(key)
-	}
 
 	return nil
 }
@@ -327,7 +391,6 @@ func (batch *LevelDBWriteBatch) Write() error {
 	return batch.store.db.Write(writeOptions, wb)
 }
 
-
 // -----------------------------------------------
 // Key encoding
 // -----------------------------------------------
@@ -340,6 +403,15 @@ func encodeTaggedKey(tags []uint16, key string) []byte {
 	}
 	buf.Write(keyBytes)
 	return buf.Bytes()
+}
+
+func encodeIndexKey(prefix []byte, target string, source string) []byte {
+	var buf = make([]byte, 0, len(prefix) + len(target) + len(source))
+	buf = append(buf, prefix...)
+	buf = append(buf, []byte(target)...)
+	buf = append(buf, 0)
+	buf = append(buf, []byte(source)...)
+	return buf
 }
 
 // -----------------------------------------------

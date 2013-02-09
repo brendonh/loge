@@ -7,7 +7,6 @@ import (
 
 func LinkSandbox() {
 	var db = loge.NewLogeDB(loge.NewLevelDBStore("data/links"))
-
 	defer db.Close()
 
 	db.CreateType("person", 1, &Person{}, nil)
@@ -45,7 +44,62 @@ func LinkSandbox() {
 		fmt.Printf("Ruby links: %v\n", t.ReadLinks("pet", "owner", "Ruby"))
 	}, 0)
 
+	var pets = db.Find("pet", "owner", "Brendon")
+	
+	for pets.Valid() {
+		var pet = pets.Next()
+		fmt.Printf("Found Brendon pet: %s\n", pet)
+	}
+	
+	pets = db.Find("pet", "owner", "Mike")
+	
+	for pets.Valid() {
+		var pet = pets.Next()
+		fmt.Printf("Found Mike pet: %s\n", pet)
+	}
+	
+	pets = db.Find("pet", "owner", "Nai")
+	
+	for pets.Valid() {
+		var pet = pets.Next()
+		fmt.Printf("Found Nai pet: %s\n", pet)
+	}
 
 	fmt.Printf("Done\n")
 }
 	
+
+func LinkBench() {
+	var db = loge.NewLogeDB(loge.NewLevelDBStore("data/linkbench"))
+	defer db.Close()
+
+	db.CreateType("person", 1, &Person{}, nil)
+
+	db.CreateType("pet", 1, &Pet{}, loge.LinkSpec{
+		"owner": "person",
+	})
+
+	fmt.Printf("Inserting...\n")
+
+	db.Transact(func (t *loge.Transaction) {
+		t.SetObj("person", "Brendon", &Person{ "Brendon", 31, []uint16{} })
+		for i := 0; i < 10000; i++ {
+			var key = fmt.Sprintf("pet-%d", i)
+			t.SetObj("pet", loge.LogeKey(key), &Pet { key, "dog" })
+			t.AddLink("pet", "owner", loge.LogeKey(key), "Brendon")
+		}
+	}, 0)
+
+	fmt.Printf("Finding...\n")
+
+	var pets = db.Find("pet", "owner", "Brendon")
+
+	var count = 0
+
+	for pets.Valid() {
+		pets.Next()
+		count++
+	}
+
+	fmt.Printf("Found %d pets\n", count)
+}

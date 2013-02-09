@@ -174,6 +174,15 @@ func (db *LogeDB) EnsureObj(objRef ObjRef, load bool) *LogeObject {
 }
 
 
+func (db *LogeDB) Find(typeName string, linkName string, target LogeKey) ResultSet {	
+	typ, ok := db.types[typeName]
+	if !ok {
+		panic(fmt.Sprintf("Type does not exist: %s", typeName))
+	}
+	return db.store.Find(typ, linkName, target)
+}
+
+
 func (db *LogeDB) NewWriteBatch() LogeWriteBatch {
 	return db.store.NewWriteBatch()
 }

@@ -21,8 +21,13 @@ type Transaction struct {
 	DB *LogeDB
 	Versions map[string]*LogeObjectVersion
 	State TransactionState
+	ResultSets []*TransactionResultSet
 }
 
+type TransactionResultSet struct {
+	trans *Transaction
+	results ResultSet
+}
 
 func NewTransaction(db *LogeDB) *Transaction {
 	return &Transaction{
@@ -91,6 +96,9 @@ func (t *Transaction) SetLinks(typeName string, linkName string, key LogeKey, ta
 	t.getLink(MakeLinkRef(typeName, linkName, key), true, true).Set(stringTargets)
 }
 
+// -----------------------------------------------
+// Internals
+// -----------------------------------------------
 
 func (t *Transaction) getLink(objRef ObjRef, forWrite bool, load bool) *LinkSet {
 	var version = t.getObj(objRef, forWrite, load)
