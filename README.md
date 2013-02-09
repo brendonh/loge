@@ -4,16 +4,17 @@ loge -- Go object database
 Current Features:
 
 * Stores Go objects
-* Full per-object version history
 * Arbitrary ACID transactions
+* Durability via leveldb storage layer
+* Link sets for objects, and reverse lookups on them
 * Fast-ish
 
 Upcoming features (in approximate order):
 
-* Object reference traversal
-* Durability
+* Better link traversal
 * Replication and failover (no auto-sharding)
 * REST API
+* Some kind of high-level query language
 * Javascript transactions
 
 
@@ -112,9 +113,9 @@ Nai: &{Nai Yu 32 []}
 Random Notes
 ------------
 
-* Generally, all DB interaction happens in a transaction
-* `ReadObj`, `WriteObj`, and `SetObj` mark an object as important, and the transaction will abort at commit time if the object has changed
-* Changes to an object retrieved with `ReadObj` are discarded, unless `WriteObj` or `SetObj` are called for it later in the transaction.
-* Object creation (via `SetObj`) follows transaction semantics
+* All DB updates happen in transactions
+* In transactions, `Read`, `Write`, and `Set` mark an object as important, and the transaction will abort at commit time if the object has changed
+* Changes to an object retrieved with `Read` are discarded, unless `Write` or `Set` are called for it later in the transaction.
+* Object creation (via `Set`) follows transaction semantics
 * A transaction run by `db.Transact(Func, Timeout)` will retry in a loop until it succeeds or times out
 * Manual transactions via `db.CreateTransaction` do not retry
