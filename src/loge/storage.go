@@ -18,9 +18,11 @@ type ResultSet interface {
 type storeContext interface {
 	get(*logeType, LogeKey) interface{}
 	getLinks(*logeType, string, LogeKey) []string
-	find(*logeType, string, LogeKey) ResultSet
 	store(*logeObject) error
 	storeLinks(*logeObject) error
+
+	find(*logeType, string, LogeKey) ResultSet
+	findFrom(*logeType, string, LogeKey, LogeKey, int) ResultSet
 }
 
 type transactionContext interface {
@@ -89,6 +91,11 @@ func (store *memStore) find(typ *logeType, linkName string, key LogeKey) ResultS
 	panic("Find not implemented on memstore")
 }
 
+func (store *memStore) findFrom(typ *logeType, linkName string, key LogeKey, from LogeKey, limit int) ResultSet {
+	// Until I can be bothered
+	panic("Find not implemented on memstore")
+}
+
 func (store *memStore) store(obj *logeObject) error {
 	obj.Lock.SpinLock()
 	defer obj.Lock.Unlock()
@@ -153,6 +160,11 @@ func (context *memContext) storeLinks(obj *logeObject) error {
 }
 
 func (context *memContext) find(typ *logeType, linkName string, key LogeKey) ResultSet {
+	// Until I can be bothered
+	panic("Find not implemented on memstore")
+}
+
+func (context *memContext) findFrom(typ *logeType, linkName string, key LogeKey, from LogeKey, limit int) ResultSet {
 	// Until I can be bothered
 	panic("Find not implemented on memstore")
 }

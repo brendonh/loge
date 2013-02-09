@@ -39,6 +39,8 @@ type levelDBResultSet struct {
 	it *prefixIterator
 	prefixLen int
 	next string
+	limit int
+	count int
 	closed bool
 }
 
@@ -197,7 +199,11 @@ func (store *levelDBStore) storeLinks(obj *logeObject) error {
 // -----------------------------------------------
 
 func (store *levelDBStore) find(typ *logeType, linkName string, key LogeKey) ResultSet {
-	return ldb_find(store, defaultReadOptions, typ, linkName, key)
+	return ldb_find(store, defaultReadOptions, typ, linkName, key, "", -1)
+}
+
+func (store *levelDBStore) findFrom(typ *logeType, linkName string, key LogeKey, from LogeKey, limit int) ResultSet {
+	return ldb_find(store, defaultReadOptions, typ, linkName, key, from, limit)
 }
 
 func (rs *levelDBResultSet) Valid() bool {
@@ -210,11 +216,17 @@ func (rs *levelDBResultSet) Next() LogeKey {
 	}
 	var next = rs.next
 	rs.it.Next()
+	rs.count++
+
 	if rs.it.Valid() {
 		rs.next = string(rs.it.Key()[rs.prefixLen:])
+		if rs.limit >= 0 && rs.count >= rs.limit {
+			rs.Close()
+		}
 	} else {
 		rs.Close()
-	}
+	} 
+
 	return LogeKey(next)
 }
 
@@ -289,6 +301,7 @@ func (context *levelDBContext) rollback() {
 
 func (context *levelDBContext) cleanup() {
 	context.ldbStore.db.ReleaseSnapshot(context.snapshot)
+	context.readOptions.Close()
 }
 
 func (context *levelDBContext) Write() error {
@@ -314,7 +327,11 @@ func (context *levelDBContext) storeLinks(obj *logeObject) error {
 }
 
 func (context *levelDBContext) find(typ *logeType, linkName string, target LogeKey) ResultSet {
-	return ldb_find(context.ldbStore, context.readOptions, typ, linkName, target)
+	return ldb_find(context.ldbStore, context.readOptions, typ, linkName, target, "", -1)
+}
+
+func (context *levelDBContext) findFrom(typ *logeType, linkName string, key LogeKey, from LogeKey, limit int) ResultSet {
+	return ldb_find(context.ldbStore, context.readOptions, typ, linkName, key, from, limit)
 }
 
 func (context *levelDBContext) get(typ *logeType, key LogeKey) interface{} {
@@ -332,7 +349,7 @@ func (context *levelDBContext) getLinks(typ *logeType, linkName string, key Loge
 func (store *levelDBStore) loadTypeMetadata() {
 	var typeType = store.types.Type("_type")
 	var tag = typeType.EncodeTag()
-	var it = store.iteratePrefix(tag, defaultReadOptions)
+	var it = store.iteratePrefix(tag, []byte{}, defaultReadOptions)
 	defer it.Close()
 
 	for it = it; it.Valid(); it.Next() {
@@ -348,7 +365,7 @@ func (store *levelDBStore) loadTypeMetadata() {
 
 func (store *levelDBStore) tagVersions(vt *spack.VersionedType, typ *logeType) {
 	var prefix = encodeTaggedKey([]uint16{ldb_LINK_INFO_TAG, vt.Tag}, "")
-	var it = store.iteratePrefix(prefix, defaultReadOptions)
+	var it = store.iteratePrefix(prefix, []byte{}, defaultReadOptions)
 	defer it.Close()
 
 	for it = it; it.Valid(); it.Next() {
@@ -356,7 +373,6 @@ func (store *levelDBStore) tagVersions(vt *spack.VersionedType, typ *logeType) {
 		spack.DecodeFromBytes(info, linkInfoSpec, it.Value())
 		typ.Links[info.Name] = info
 	}
-
 
 	var maxTag uint16 = 0;
 	var missing = make([]*linkInfo, 0)
@@ -413,9 +429,13 @@ func encodeIndexKey(prefix []byte, target string, source string) []byte {
 // -----------------------------------------------
 
 func ldb_find(store *levelDBStore, readOptions *levigo.ReadOptions,
-	typ *logeType, linkName string, target LogeKey) ResultSet {
+	typ *logeType, linkName string, target LogeKey, from LogeKey, limit int) ResultSet {
 
-	fmt.Printf("Find options %v\n", readOptions)
+	if limit == 0 {
+		return &levelDBResultSet {
+			closed: true,
+		}
+	}
 
 	var vt = store.types.Type(typ.Name)
 	var linkInfo = typ.Links[linkName]
@@ -424,7 +444,7 @@ func ldb_find(store *levelDBStore, readOptions *levigo.ReadOptions,
 		encodeTaggedKey([]uint16{ldb_INDEX_TAG, vt.Tag, linkInfo.Tag}, string(target)),
 		0)
 
-	var it = store.iteratePrefix(prefix, readOptions)
+	var it = store.iteratePrefix(prefix, []byte(from), readOptions)
 	if !it.Valid() {
 		it.Close()
 		return &levelDBResultSet {
@@ -433,7 +453,6 @@ func ldb_find(store *levelDBStore, readOptions *levigo.ReadOptions,
 	}
 
 	var prefixLen = len(prefix)
-
 	var next = string(it.Key()[prefixLen:])
 
 	return &levelDBResultSet{
@@ -441,6 +460,8 @@ func ldb_find(store *levelDBStore, readOptions *levigo.ReadOptions,
 		prefixLen: prefixLen,
 		next: next,
 		closed: false,
+		limit: limit,
+		count: 0,
 	}
 }
 
@@ -506,9 +527,14 @@ type prefixIterator struct {
 	Finished bool
 }
 
-func (store *levelDBStore) iteratePrefix(prefix []byte, readOptions *levigo.ReadOptions) *prefixIterator {
+func (store *levelDBStore) iteratePrefix(prefix []byte, from []byte, readOptions *levigo.ReadOptions) *prefixIterator {
 	var it = store.db.NewIterator(readOptions)
-	it.Seek(prefix)
+	var seekPrefix = append(prefix, from...)
+	it.Seek(seekPrefix)
+
+	if len(from) > 0 && it.Valid() {
+		it.Next()
+	}
 
 	return &prefixIterator {
 		Prefix: prefix,

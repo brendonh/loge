@@ -84,7 +84,7 @@ func LinkBench() {
 	db.Transact(func (t *loge.Transaction) {
 		t.Set("person", "Brendon", &Person{ "Brendon", 31, []uint16{} })
 		for i := 0; i < 10000; i++ {
-			var key = fmt.Sprintf("pet-%d", i)
+			var key = fmt.Sprintf("pet-%04d", i)
 			t.Set("pet", loge.LogeKey(key), &Pet { key, "dog" })
 			t.AddLink("pet", "owner", loge.LogeKey(key), "Brendon")
 		}
@@ -102,4 +102,20 @@ func LinkBench() {
 	}
 
 	fmt.Printf("Found %d pets\n", count)
+
+	count = 0
+
+	var lastPet loge.LogeKey = ""
+
+	var loops = 0
+	for loops < 1000 {
+		var somePets = db.FindFrom("pet", "owner", "Brendon", lastPet, 100)
+		for somePets.Valid() {
+			lastPet = somePets.Next()
+			count++
+		}
+		loops++
+	}
+
+	fmt.Printf("Sliced %d pets\n", count)
 }

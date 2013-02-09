@@ -99,6 +99,10 @@ func (t *Transaction) Find(typeName string, linkName string, target LogeKey) Res
 	return t.context.find(t.db.types[typeName], linkName, target)
 }
 
+func (t *Transaction) FindFrom(typeName string, linkName string, target LogeKey, from LogeKey, limit int) ResultSet {	
+	return t.context.findFrom(t.db.types[typeName], linkName, target, from, limit)
+}
+
 // -----------------------------------------------
 // Internals
 // -----------------------------------------------

@@ -108,11 +108,11 @@ func (db *LogeDB) Transact(actor Transactor, timeout time.Duration) bool {
 }
 
 func (db *LogeDB) Find(typeName string, linkName string, target LogeKey) ResultSet {	
-	typ, ok := db.types[typeName]
-	if !ok {
-		panic(fmt.Sprintf("Type does not exist: %s", typeName))
-	}
-	return db.store.find(typ, linkName, target)
+	return db.store.find(db.types[typeName], linkName, target)
+}
+
+func (db *LogeDB) FindFrom(typeName string, linkName string, target LogeKey, from LogeKey, limit int) ResultSet {	
+	return db.store.findFrom(db.types[typeName], linkName, target, from, limit)
 }
 
 
