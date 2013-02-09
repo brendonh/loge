@@ -129,6 +129,27 @@ func (db *LogeDB) FlushCache() int {
 	return count
 }
 
+// -----------------------------------------------
+// Dirty Operations
+// -----------------------------------------------
+
+func (db *LogeDB) DirtyExists(typeName string, key LogeKey) bool {
+	var obj = db.store.get(db.types[typeName], key)
+	return obj != nil
+}
+
+func (db *LogeDB) DirtyRead(typeName string, key LogeKey) interface{} {
+	var typ = db.types[typeName]
+	var obj = db.store.get(typ, key)
+	if obj == nil {
+		return typ.NilValue()
+	}
+	return obj
+}
+
+func (db *LogeDB) DirtyReadLinks(typeName string, linkName string, key LogeKey) []string {
+	return db.store.getLinks(db.types[typeName], linkName, key)
+}
 
 // -----------------------------------------------
 // Internals

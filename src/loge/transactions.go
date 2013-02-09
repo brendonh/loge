@@ -165,7 +165,6 @@ func (t *Transaction) Commit() bool {
 }
 
 func (t *Transaction) tryCommit() bool {
-	//fmt.Printf("-------------\n")
 	for _, version := range t.versions {
 		var obj = version.LogeObj
 

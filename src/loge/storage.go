@@ -90,7 +90,11 @@ func (store *memStore) find(typ *logeType, linkName string, key LogeKey) ResultS
 func (store *memStore) store(obj *logeObject) error {
 	obj.Lock.SpinLock()
 	defer obj.Lock.Unlock()
-	store.objects[obj.Type.Name][obj.Key] = obj.Current.Object
+	if !obj.Current.hasValue() {
+		delete(store.objects[obj.Type.Name], obj.Key)
+	} else {
+		store.objects[obj.Type.Name][obj.Key] = obj.Current.Object
+	}
 	return nil
 }
 
@@ -119,12 +123,18 @@ func (context *memContext) getLinks(t *logeType, linkName string, key LogeKey) [
 }
 
 func (context *memContext) store(obj *logeObject) error {
+	var val interface{}
+	if !obj.Current.hasValue() {
+		val = nil
+	} else {
+		val = obj.Current.Object
+	}
 	context.writes = append(
 		context.writes,
 		memWriteEntry{ 
 		TypeKey: obj.Type.Name, 
 		ObjKey: obj.Key, 
-		Value: obj.Current.Object,
+		Value: val,
 	})
 	return nil
 }
