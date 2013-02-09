@@ -4,12 +4,6 @@ import (
 	"reflect"
 )
 
-const (
-	UNLOCKED = 0
-	LOCKED = 1
-)
-
-
 type logeObject struct {
 	DB *LogeDB
 	Type *logeType

@@ -5,6 +5,11 @@ import (
 	"runtime"
 )
 
+const (
+	lock_UNLOCKED = 0
+	lock_LOCKED = 1
+)
+
 type lockToken struct{}
 
 var _lock_token struct{}
@@ -15,7 +20,7 @@ type spinLock struct {
 
 func (lock *spinLock) TryLock() bool {
 	return atomic.CompareAndSwapInt32(
-		&lock.lock, UNLOCKED, LOCKED)
+		&lock.lock, lock_UNLOCKED, lock_LOCKED)
 }
 
 func (lock *spinLock) SpinLock() {
@@ -28,5 +33,5 @@ func (lock *spinLock) SpinLock() {
 }
 
 func (lock *spinLock) Unlock() {
-	lock.lock = UNLOCKED
+	lock.lock = lock_UNLOCKED
 }

@@ -11,12 +11,10 @@ import (
 	"github.com/jmhodges/levigo"
 )
 
-const VERSION = 1
-
-const LINK_TAG uint16 = 2
-const LINK_INFO_TAG uint16 = 3
-const INDEX_TAG uint16 = 4
-const START_TAG uint16 = 8
+const ldb_LINK_TAG uint16 = 2
+const ldb_LINK_INFO_TAG uint16 = 3
+const ldb_INDEX_TAG uint16 = 4
+const ldb_START_TAG uint16 = 8
 
 type levelDBStore struct {
 	basePath string
@@ -74,7 +72,7 @@ func NewLevelDBStore(basePath string) LogeStore {
 		linkInfoSpec: spack.MakeTypeSpec(linkInfo{}),
 	}
 
-	store.types.LastTag = START_TAG
+	store.types.LastTag = ldb_START_TAG
 	store.loadTypeMetadata()
 	go store.writer()
 
@@ -151,7 +149,7 @@ func (store *levelDBStore) getLinks(typ *logeType, linkName string, objKey LogeK
 		panic(fmt.Sprintf("Link info missing for %s", linkName))
 	}
 
-	var key = encodeTaggedKey([]uint16{LINK_TAG, vt.Tag, linkInfo.Tag}, string(objKey))
+	var key = encodeTaggedKey([]uint16{ldb_LINK_TAG, vt.Tag, linkInfo.Tag}, string(objKey))
 
 	val, err := store.db.Get(readOptions, key)
 
@@ -179,7 +177,7 @@ func (store *levelDBStore) find(typ *logeType, linkName string, target LogeKey) 
 	var linkInfo = typ.Links[linkName]
 
 	var prefix = append(
-		encodeTaggedKey([]uint16{INDEX_TAG, vt.Tag, linkInfo.Tag}, string(target)),
+		encodeTaggedKey([]uint16{ldb_INDEX_TAG, vt.Tag, linkInfo.Tag}, string(target)),
 		0)
 
 	var it = store.iteratePrefix(prefix)
@@ -280,12 +278,12 @@ func (batch *levelDBWriteBatch) StoreLinks(linkObj *logeObject) error {
 	var vt = batch.store.types.Type(linkObj.Type.Name)
 	var linkInfo = linkObj.Type.Links[linkObj.LinkName]
 
-	var key = encodeTaggedKey([]uint16{LINK_TAG, vt.Tag, linkInfo.Tag}, string(linkObj.Key))
+	var key = encodeTaggedKey([]uint16{ldb_LINK_TAG, vt.Tag, linkInfo.Tag}, string(linkObj.Key))
 	val, _ := spack.EncodeToBytes(set.ReadKeys(), batch.store.linkSpec)
 
 	batch.Append(key, val)
 
-	var prefix = encodeTaggedKey([]uint16{INDEX_TAG, vt.Tag, linkInfo.Tag}, "")
+	var prefix = encodeTaggedKey([]uint16{ldb_INDEX_TAG, vt.Tag, linkInfo.Tag}, "")
 	var source = string(linkObj.Key)
 
 	for _, target := range set.Removed {
@@ -352,7 +350,7 @@ func (store *levelDBStore) loadTypeMetadata() {
 }
 
 func (store *levelDBStore) tagVersions(vt *spack.VersionedType, typ *logeType) {
-	var prefix = encodeTaggedKey([]uint16{LINK_INFO_TAG, vt.Tag}, "")
+	var prefix = encodeTaggedKey([]uint16{ldb_LINK_INFO_TAG, vt.Tag}, "")
 	var it = store.iteratePrefix(prefix)
 	defer it.Close()
 
@@ -378,7 +376,7 @@ func (store *levelDBStore) tagVersions(vt *spack.VersionedType, typ *logeType) {
 	for _, info := range missing {
 		maxTag++
 		info.Tag = maxTag
-		var key = encodeTaggedKey([]uint16{LINK_INFO_TAG, vt.Tag}, info.Name)
+		var key = encodeTaggedKey([]uint16{ldb_LINK_INFO_TAG, vt.Tag}, info.Name)
 		enc, _ := spack.EncodeToBytes(info, store.linkInfoSpec)
 		fmt.Printf("Updating link: %s::%s (%d)\n", typ.Name, info.Name, info.Tag)
 		var err = store.db.Put(writeOptions, key, enc)

@@ -141,7 +141,7 @@ func (t *Transaction) getObj(ref objRef, forWrite bool, load bool) *objectVersio
 }
 
 
-const BACKOFF_EXPONENT = 1.05
+const t_BACKOFF_EXPONENT = 1.05
 
 func (t *Transaction) Commit() bool {
 	
@@ -158,7 +158,7 @@ func (t *Transaction) Commit() bool {
 		}
 		var delay = time.Duration(delayFact - float64(rand.Intn(10)))
 		time.Sleep(delay * time.Millisecond)
-		delayFact *= BACKOFF_EXPONENT
+		delayFact *= t_BACKOFF_EXPONENT
 	}
 
 	return t.state == FINISHED
