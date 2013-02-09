@@ -4,21 +4,21 @@ import (
 	"reflect"
 )
 
-type LogeType struct {
+type logeType struct {
 	Name string
 	Version uint16
 	Exemplar interface{}
-	Links map[string]*LinkInfo
+	Links map[string]*linkInfo
 }
 
 
-func (t *LogeType) NilValue() interface{} {
+func (t *logeType) NilValue() interface{} {
 	return reflect.Zero(reflect.TypeOf(t.Exemplar)).Interface()
 }
 
 
 // XXX TODO: Do this via the store instead, and just re-decode spack objects for consistency
-func (t *LogeType) Copy(object interface{}) interface{} {
+func (t *logeType) Copy(object interface{}) interface{} {
 	var value = reflect.ValueOf(object)
 
 	if value.Kind() != reflect.Ptr || reflect.Indirect(value).Kind() != reflect.Struct {

@@ -9,16 +9,16 @@ type lockToken struct{}
 
 var _lock_token struct{}
 
-type SpinLock struct {
+type spinLock struct {
 	lock int32
 }
 
-func (lock *SpinLock) TryLock() bool {
+func (lock *spinLock) TryLock() bool {
 	return atomic.CompareAndSwapInt32(
 		&lock.lock, UNLOCKED, LOCKED)
 }
 
-func (lock *SpinLock) SpinLock() {
+func (lock *spinLock) SpinLock() {
 	for {
 		if lock.TryLock() {
 			return
@@ -27,6 +27,6 @@ func (lock *SpinLock) SpinLock() {
 	}
 }
 
-func (lock *SpinLock) Unlock() {
+func (lock *spinLock) Unlock() {
 	lock.lock = UNLOCKED
 }

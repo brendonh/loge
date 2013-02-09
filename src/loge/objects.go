@@ -12,16 +12,16 @@ const (
 
 type LogeObject struct {
 	DB *LogeDB
-	Type *LogeType
+	Type *logeType
 	Key LogeKey
-	Current *LogeObjectVersion
+	Current *objectVersion
 	RefCount uint32
 	LinkName string
-	Lock SpinLock
+	Lock spinLock
 	Loaded bool
 }
 
-type LogeObjectVersion struct {
+type objectVersion struct {
 	LogeObj *LogeObject
 	Version int
 	Object interface{}
@@ -29,7 +29,7 @@ type LogeObjectVersion struct {
 }
 
 
-func InitializeObject(db *LogeDB, t *LogeType, key LogeKey) *LogeObject {
+func initializeObject(db *LogeDB, t *logeType, key LogeKey) *LogeObject {
 	return &LogeObject{
 		DB: db,
 		Type: t,
@@ -41,12 +41,12 @@ func InitializeObject(db *LogeDB, t *LogeType, key LogeKey) *LogeObject {
 }
 
 
-func (obj *LogeObject) NewVersion() *LogeObjectVersion {
+func (obj *LogeObject) newVersion() *objectVersion {
 	var current = obj.Current
 
 	var newObj = obj.Type.Copy(current.Object)
 
-	return &LogeObjectVersion{
+	return &objectVersion{
 		LogeObj: obj,
 		Version: current.Version + 1,
 		Object: newObj,
@@ -54,13 +54,7 @@ func (obj *LogeObject) NewVersion() *LogeObjectVersion {
 	}
 }
 
-
-func (obj *LogeObject) Applicable(version *LogeObjectVersion) bool {
-	return version.Version == obj.Current.Version + 1
-}
-
-
-func (obj *LogeObject) ApplyVersion(version *LogeObjectVersion, batch LogeWriteBatch) {
+func (obj *LogeObject) applyVersion(version *objectVersion, batch writeBatch) {
 	obj.Current = version
 
 	if obj.LinkName == "" {
@@ -75,9 +69,7 @@ func (obj *LogeObject) ApplyVersion(version *LogeObjectVersion, batch LogeWriteB
 	}
 }
 
-
-
-func (version *LogeObjectVersion) HasValue() bool {
+func (version *objectVersion) hasValue() bool {
 	var value = reflect.ValueOf(version.Object)
 	return !value.IsNil()
 }

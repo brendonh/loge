@@ -4,21 +4,21 @@ import (
 	"sort"
 )
 
-type Links []string
+type linkList []string
 type LinkSpec map[string]string
 
-type LinkInfo struct {
+type linkInfo struct {
 	Name string
 	Target string
 	Tag uint16
 }
 
-func (links Links) Has(key string) bool {
+func (links linkList) Has(key string) bool {
 	var i = sort.SearchStrings(links, key)
 	return i < len(links) && links[i] == key
 }
 
-func (links Links) Add(key string) Links {
+func (links linkList) Add(key string) linkList {
 	if links.Has(key) {
 		return links
 	}
@@ -28,7 +28,7 @@ func (links Links) Add(key string) Links {
 	return newLinks
 }
 
-func (links Links) Remove(key string) Links {
+func (links linkList) Remove(key string) linkList {
 	var i = sort.SearchStrings(links, key)
 	if i >= len(links) || links[i] != key {
 		return links
@@ -39,9 +39,9 @@ func (links Links) Remove(key string) Links {
 
 
 type LinkSet struct {
-	Original Links `loge:"keep"`
-	Added Links
-	Removed Links
+	Original linkList `loge:"keep"`
+	Added linkList
+	Removed linkList
 }
 
 
