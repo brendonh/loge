@@ -6,7 +6,7 @@ Current Features:
 * Stores Go objects
 * Full per-object version history
 * Arbitrary ACID transactions
-* Increment benchmark (in `logetest/increment.go`) currently runs 1M TPS on my box, or ~250k TPS when lock contention is high
+* Fast-ish
 
 Upcoming features (in approximate order):
 
@@ -93,7 +93,8 @@ func main() {
 		var nai = trans.Read("person", "nai")
 		fmt.Printf("Nai: %v\n", nai)
 	}, 0)
-}```
+}
+```
 
 Output:
 
