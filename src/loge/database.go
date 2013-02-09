@@ -23,7 +23,7 @@ func NewLogeDB(store LogeStore) *LogeDB {
 
 type typeMap map[string]*logeType
 
-type objCache map[string]*LogeObject
+type objCache map[string]*logeObject
 
 type objRef struct {
 	TypeName string
@@ -55,7 +55,7 @@ func (objRef objRef) IsLink() bool {
 
 
 func (db *LogeDB) Close() {
-	db.store.Close()
+	db.store.close()
 }
 
 func (db *LogeDB) CreateType(name string, version uint16, exemplar interface{}, linkSpec LinkSpec) *logeType {
@@ -112,7 +112,7 @@ func (db *LogeDB) Find(typeName string, linkName string, target LogeKey) ResultS
 	if !ok {
 		panic(fmt.Sprintf("Type does not exist: %s", typeName))
 	}
-	return db.store.Find(typ, linkName, target)
+	return db.store.find(typ, linkName, target)
 }
 
 
@@ -134,7 +134,7 @@ func (db *LogeDB) FlushCache() int {
 // Internals
 // -----------------------------------------------
 
-func (db *LogeDB) ensureObj(ref objRef, load bool) *LogeObject {
+func (db *LogeDB) ensureObj(ref objRef, load bool) *logeObject {
 	var typeName = ref.TypeName
 	var key = ref.Key
 
@@ -164,11 +164,11 @@ func (db *LogeDB) ensureObj(ref objRef, load bool) *LogeObject {
 	if ref.IsLink() { 
 		var links []string
 		if load {
-			links = db.store.GetLinks(typ, ref.LinkName, key)
+			links = db.store.getLinks(typ, ref.LinkName, key)
 			obj.Loaded = true
 		}
 
-		var linkSet = NewLinkSet()
+		var linkSet = newLinkSet()
 		linkSet.Original = links
 		version = &objectVersion {
 			LogeObj: obj,
@@ -181,7 +181,7 @@ func (db *LogeDB) ensureObj(ref objRef, load bool) *LogeObject {
 		var object interface{}
 		
 		if load {
-			object = db.store.Get(typ, key)
+			object = db.store.get(typ, key)
 			obj.Loaded = true
 		}
 

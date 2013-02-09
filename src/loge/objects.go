@@ -10,7 +10,7 @@ const (
 )
 
 
-type LogeObject struct {
+type logeObject struct {
 	DB *LogeDB
 	Type *logeType
 	Key LogeKey
@@ -22,15 +22,15 @@ type LogeObject struct {
 }
 
 type objectVersion struct {
-	LogeObj *LogeObject
+	LogeObj *logeObject
 	Version int
 	Object interface{}
 	Dirty bool
 }
 
 
-func initializeObject(db *LogeDB, t *logeType, key LogeKey) *LogeObject {
-	return &LogeObject{
+func initializeObject(db *LogeDB, t *logeType, key LogeKey) *logeObject {
+	return &logeObject{
 		DB: db,
 		Type: t,
 		Key: key,
@@ -41,7 +41,7 @@ func initializeObject(db *LogeDB, t *logeType, key LogeKey) *LogeObject {
 }
 
 
-func (obj *LogeObject) newVersion() *objectVersion {
+func (obj *logeObject) newVersion() *objectVersion {
 	var current = obj.Current
 
 	var newObj = obj.Type.Copy(current.Object)
@@ -54,7 +54,7 @@ func (obj *LogeObject) newVersion() *objectVersion {
 	}
 }
 
-func (obj *LogeObject) applyVersion(version *objectVersion, batch writeBatch) {
+func (obj *logeObject) applyVersion(version *objectVersion, batch writeBatch) {
 	obj.Current = version
 
 	if obj.LinkName == "" {
@@ -65,7 +65,7 @@ func (obj *LogeObject) applyVersion(version *objectVersion, batch writeBatch) {
 
 	version.Dirty = false
 	if obj.LinkName != "" {
-		version.Object.(*LinkSet).Freeze()
+		version.Object.(*linkSet).Freeze()
 	}
 }
 

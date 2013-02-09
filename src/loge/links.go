@@ -38,27 +38,27 @@ func (links linkList) Remove(key string) linkList {
 
 
 
-type LinkSet struct {
+type linkSet struct {
 	Original linkList `loge:"keep"`
 	Added linkList
 	Removed linkList
 }
 
 
-func NewLinkSet() *LinkSet {
-	return &LinkSet{
+func newLinkSet() *linkSet {
+	return &linkSet{
 	}
 }
 
 
-func (ls *LinkSet) NewVersion() *LinkSet {
-	return &LinkSet{
+func (ls *linkSet) NewVersion() *linkSet {
+	return &linkSet{
 		Original: ls.Original,
 	}
 }
 
 
-func (ls *LinkSet) Freeze() {
+func (ls *linkSet) Freeze() {
 	ls.Original = ls.ReadKeys()
 	ls.Added = nil
 	ls.Removed = nil
@@ -66,7 +66,7 @@ func (ls *LinkSet) Freeze() {
 
 
 
-func (ls *LinkSet) Set(keys []string) {
+func (ls *linkSet) Set(keys []string) {
 	// XXX BGH TODO: Delta this
 	sort.Strings(keys)	
 	ls.Removed = ls.Original
@@ -74,14 +74,14 @@ func (ls *LinkSet) Set(keys []string) {
 }
 
 
-func (ls *LinkSet) Add(key string) {
+func (ls *linkSet) Add(key string) {
 	ls.Removed = ls.Removed.Remove(key)
 	if !ls.Original.Has(key) {
 		ls.Added = ls.Added.Add(key)
 	}
 }
 
-func (ls *LinkSet) Remove(key string) {
+func (ls *linkSet) Remove(key string) {
 	// XXX BGH Hrgh
 	if (!ls.Original.Has(key) && !ls.Added.Has(key)) || ls.Removed.Has(key) {
 		return
@@ -91,7 +91,7 @@ func (ls *LinkSet) Remove(key string) {
 	ls.Removed = ls.Removed.Add(key)
 }
 
-func (ls *LinkSet) ReadKeys() []string {
+func (ls *linkSet) ReadKeys() []string {
 	var keys []string
 
 	for _, key := range ls.Original {
@@ -106,7 +106,7 @@ func (ls *LinkSet) ReadKeys() []string {
 	return keys
 }
 
-func (ls *LinkSet) Has(key string) bool {
+func (ls *linkSet) Has(key string) bool {
 	if ls.Removed.Has(key) {
 		return false;
 	}

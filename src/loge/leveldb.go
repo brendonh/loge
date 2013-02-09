@@ -18,7 +18,7 @@ const LINK_INFO_TAG uint16 = 3
 const INDEX_TAG uint16 = 4
 const START_TAG uint16 = 8
 
-type LevelDBStore struct {
+type levelDBStore struct {
 	basePath string
 	db *levigo.DB
 	types *spack.TypeSet
@@ -38,12 +38,12 @@ type levelDBResultSet struct {
 }
 
 type levelDBWriteBatch struct {
-	store *LevelDBStore
-	batch []LevelDBWriteEntry
+	store *levelDBStore
+	batch []levelDBWriteEntry
 	result chan error
 }
 
-type LevelDBWriteEntry struct {
+type levelDBWriteEntry struct {
 	Key []byte
 	Val []byte
 	Delete bool
@@ -52,7 +52,7 @@ type LevelDBWriteEntry struct {
 var writeOptions = levigo.NewWriteOptions()
 var readOptions = levigo.NewReadOptions()
 
-func NewLevelDBStore(basePath string) *LevelDBStore {
+func NewLevelDBStore(basePath string) LogeStore {
 
 	var opts = levigo.NewOptions()
 	opts.SetCreateIfMissing(true)
@@ -62,7 +62,7 @@ func NewLevelDBStore(basePath string) *LevelDBStore {
 		panic(fmt.Sprintf("Can't open DB at %s: %v", basePath, err))
 	}
 
-	var store = &LevelDBStore {
+	var store = &levelDBStore {
 		basePath: basePath,
 		db: db,
 		types: spack.NewTypeSet(),
@@ -81,7 +81,7 @@ func NewLevelDBStore(basePath string) *LevelDBStore {
 	return store
 }
 
-func (store *LevelDBStore) Close() {
+func (store *levelDBStore) close() {
 	store.writeQueue <- nil
 	for !store.flushed {
 		runtime.Gosched()
@@ -89,7 +89,7 @@ func (store *LevelDBStore) Close() {
 	store.db.Close()
 }
 
-func (store *LevelDBStore) registerType(typ *logeType) {
+func (store *levelDBStore) registerType(typ *logeType) {
 	var vt = store.types.RegisterType(typ.Name)
 	var exemplar = reflect.ValueOf(typ.Exemplar).Elem().Interface()
 	vt.AddVersion(typ.Version, exemplar, nil)
@@ -119,46 +119,7 @@ func (store *LevelDBStore) registerType(typ *logeType) {
 }
 
 
-func (store *LevelDBStore) tagVersions(vt *spack.VersionedType, typ *logeType) {
-	var prefix = encodeTaggedKey([]uint16{LINK_INFO_TAG, vt.Tag}, "")
-	var it = store.iteratePrefix(prefix)
-	defer it.Close()
-
-	for it = it; it.Valid(); it.Next() {
-		var info = &linkInfo{}
-		spack.DecodeFromBytes(info, store.linkInfoSpec, it.Value())
-		typ.Links[info.Name] = info
-	}
-
-
-	var maxTag uint16 = 0;
-	var missing = make([]*linkInfo, 0)
-
-	for _, info := range typ.Links {
-		if info.Tag > maxTag {
-			maxTag = info.Tag
-		}
-		if info.Tag == 0 {
-			missing = append(missing, info)
-		}
-	}
-
-	for _, info := range missing {
-		maxTag++
-		info.Tag = maxTag
-		var key = encodeTaggedKey([]uint16{LINK_INFO_TAG, vt.Tag}, info.Name)
-		enc, _ := spack.EncodeToBytes(info, store.linkInfoSpec)
-		fmt.Printf("Updating link: %s::%s (%d)\n", typ.Name, info.Name, info.Tag)
-		var err = store.db.Put(writeOptions, key, enc)
-		if err != nil {
-			panic(fmt.Sprintf("Write error: %v\n", err))
-		}
-	}
-
-}
-
-
-func (store *LevelDBStore) Get(typ *logeType, key LogeKey) interface{} {
+func (store *levelDBStore) get(typ *logeType, key LogeKey) interface{} {
 
 	var vt = store.types.Type(typ.Name)
 	var encKey = vt.EncodeKey(string(key))
@@ -182,7 +143,7 @@ func (store *LevelDBStore) Get(typ *logeType, key LogeKey) interface{} {
 	return obj
 }
 
-func (store *LevelDBStore) GetLinks(typ *logeType, linkName string, objKey LogeKey) []string {
+func (store *levelDBStore) getLinks(typ *logeType, linkName string, objKey LogeKey) []string {
 	var vt = store.types.Type(typ.Name)
 
 	var linkInfo, ok = typ.Links[linkName]
@@ -213,7 +174,7 @@ func (store *LevelDBStore) GetLinks(typ *logeType, linkName string, objKey LogeK
 // Search
 // -----------------------------------------------
 
-func (store *LevelDBStore) Find(typ *logeType, linkName string, target LogeKey) ResultSet {
+func (store *levelDBStore) find(typ *logeType, linkName string, target LogeKey) ResultSet {
 	var vt = store.types.Type(typ.Name)
 	var linkInfo = typ.Links[linkName]
 
@@ -269,15 +230,15 @@ func (rs *levelDBResultSet) Close() {
 // Write Batches
 // -----------------------------------------------
 
-func (store *LevelDBStore) newWriteBatch() writeBatch {
+func (store *levelDBStore) newWriteBatch() writeBatch {
 	return &levelDBWriteBatch{
 		store: store,
-		batch: make([]LevelDBWriteEntry, 0),
+		batch: make([]levelDBWriteEntry, 0),
 		result: make(chan error),
 	}
 }
 
-func (store *LevelDBStore) writer() {
+func (store *levelDBStore) writer() {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	for batch := range store.writeQueue {
@@ -289,7 +250,7 @@ func (store *LevelDBStore) writer() {
 	store.flushed = true
 }
 
-func (batch *levelDBWriteBatch) Store(obj *LogeObject) error {
+func (batch *levelDBWriteBatch) Store(obj *logeObject) error {
 	var vt = batch.store.types.Type(obj.Type.Name)
 	var key = vt.EncodeKey(string(obj.Key))
 
@@ -309,8 +270,8 @@ func (batch *levelDBWriteBatch) Store(obj *LogeObject) error {
 	return nil
 }
 
-func (batch *levelDBWriteBatch) StoreLinks(linkObj *LogeObject) error {
-	var set = linkObj.Current.Object.(*LinkSet)
+func (batch *levelDBWriteBatch) StoreLinks(linkObj *logeObject) error {
+	var set = linkObj.Current.Object.(*linkSet)
 
 	if len(set.Added) == 0 && len(set.Removed) == 0 {
 		return nil
@@ -342,11 +303,11 @@ func (batch *levelDBWriteBatch) StoreLinks(linkObj *LogeObject) error {
 }
 
 func (batch *levelDBWriteBatch) Append(key []byte, val []byte) {
-	batch.batch = append(batch.batch, LevelDBWriteEntry{ key, val, false })
+	batch.batch = append(batch.batch, levelDBWriteEntry{ key, val, false })
 }
 
 func (batch *levelDBWriteBatch) Delete(key []byte) {
-	batch.batch = append(batch.batch, LevelDBWriteEntry{ key, nil, true })
+	batch.batch = append(batch.batch, levelDBWriteEntry{ key, nil, true })
 }
 
 func (batch *levelDBWriteBatch) Commit() error {
@@ -373,7 +334,7 @@ func (batch *levelDBWriteBatch) Write() error {
 // Internals
 // -----------------------------------------------
 
-func (store *LevelDBStore) loadTypeMetadata() {
+func (store *levelDBStore) loadTypeMetadata() {
 	var typeType = store.types.Type("_type")
 	var tag = typeType.EncodeTag()
 	var it = store.iteratePrefix(tag)
@@ -388,6 +349,44 @@ func (store *LevelDBStore) loadTypeMetadata() {
 
 		store.types.LoadType(typeInfo.(*spack.VersionedType))
 	}
+}
+
+func (store *levelDBStore) tagVersions(vt *spack.VersionedType, typ *logeType) {
+	var prefix = encodeTaggedKey([]uint16{LINK_INFO_TAG, vt.Tag}, "")
+	var it = store.iteratePrefix(prefix)
+	defer it.Close()
+
+	for it = it; it.Valid(); it.Next() {
+		var info = &linkInfo{}
+		spack.DecodeFromBytes(info, store.linkInfoSpec, it.Value())
+		typ.Links[info.Name] = info
+	}
+
+
+	var maxTag uint16 = 0;
+	var missing = make([]*linkInfo, 0)
+
+	for _, info := range typ.Links {
+		if info.Tag > maxTag {
+			maxTag = info.Tag
+		}
+		if info.Tag == 0 {
+			missing = append(missing, info)
+		}
+	}
+
+	for _, info := range missing {
+		maxTag++
+		info.Tag = maxTag
+		var key = encodeTaggedKey([]uint16{LINK_INFO_TAG, vt.Tag}, info.Name)
+		enc, _ := spack.EncodeToBytes(info, store.linkInfoSpec)
+		fmt.Printf("Updating link: %s::%s (%d)\n", typ.Name, info.Name, info.Tag)
+		var err = store.db.Put(writeOptions, key, enc)
+		if err != nil {
+			panic(fmt.Sprintf("Write error: %v\n", err))
+		}
+	}
+
 }
 
 // -----------------------------------------------
@@ -423,7 +422,7 @@ type prefixIterator struct {
 	Finished bool
 }
 
-func (store *LevelDBStore) iteratePrefix(prefix []byte) *prefixIterator {
+func (store *levelDBStore) iteratePrefix(prefix []byte) *prefixIterator {
 	var it = store.db.NewIterator(readOptions)
 	it.Seek(prefix)
 

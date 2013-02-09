@@ -97,9 +97,9 @@ func (t *Transaction) SetLinks(typeName string, linkName string, key LogeKey, ta
 // Internals
 // -----------------------------------------------
 
-func (t *Transaction) getLink(ref objRef, forWrite bool, load bool) *LinkSet {
+func (t *Transaction) getLink(ref objRef, forWrite bool, load bool) *linkSet {
 	var version = t.getObj(ref, forWrite, load)
-	return version.Object.(*LinkSet)
+	return version.Object.(*linkSet)
 }
 
 func (t *Transaction) getObj(ref objRef, forWrite bool, load bool) *objectVersion {

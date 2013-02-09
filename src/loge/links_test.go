@@ -7,7 +7,7 @@ import (
 
 func TestLinks(t *testing.T) {
 
-	var children = NewLinkSet()
+	var children = newLinkSet()
 
 	children.Add("one")
 	children.Add("two")
@@ -129,7 +129,7 @@ func compareSets(a []string, b[]string) bool {
 	return true
 }
 
-func dumpLinkSet(t *testing.T, ls *LinkSet) {
+func dumplinkSet(t *testing.T, ls *linkSet) {
 	t.Log("------- Original ---------\n")
 	for k, v := range ls.Original {
 		t.Logf("%s => %v\n", k, v)
