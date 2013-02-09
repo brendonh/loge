@@ -27,17 +27,9 @@ func Sandbox() {
 		}
 		
 		trans.SetObj("person", "brendon", &brend)
+	}, 0)
 
-		var ted = Pet{
-			Name: "Ted",
-			Species: "Hairball",
-		}
-		trans.SetObj("pet", "ted", &ted)
-
-		var owner = trans.ReadLinks("pet", "owner", "ted")
-		fmt.Printf("Owner: %v\n", owner)
-
-		trans.AddLink("pet", "owner", "ted", "brendon")
-
+	db.Transact(func(trans *loge.Transaction) {
+		trans.DeleteObj("person", "brendon")
 	}, 0)
 }

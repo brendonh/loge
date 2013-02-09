@@ -251,6 +251,12 @@ func (store *LevelDBStore) Writer() {
 func (batch *LevelDBWriteBatch) Store(obj *LogeObject) error {
 	var vt = batch.store.types.Type(obj.Type.Name)
 	var key = vt.EncodeKey(string(obj.Key))
+
+	if !obj.Current.HasValue() {
+		batch.Delete(key)
+		return nil
+	}
+
 	var val, err = vt.EncodeObj(obj.Current.Object)
 
 	if err != nil {
