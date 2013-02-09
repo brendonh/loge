@@ -23,7 +23,7 @@ func BenchmarkNoContention(b *testing.B) {
 	db.Transact(func (t *Transaction) {
 		for i := 0; i < procs; i++ {
 			var key LogeKey = LogeKey(strconv.Itoa(i))
-			t.SetObj("counters", key, &TestCounter{Value: 0})
+			t.Set("counters", key, &TestCounter{Value: 0})
 		}
 	}, 0)
 
@@ -42,7 +42,7 @@ func BenchmarkNoContention(b *testing.B) {
 	db.Transact(func (t *Transaction) {
 		for i := 0; i < procs; i++ {
 			var key = LogeKey(strconv.Itoa(i))
-			var counter = t.ReadObj("counters", key).(*TestCounter)
+			var counter = t.Read("counters", key).(*TestCounter)
 			if counter.Value != b.N {
 				b.Errorf("Wrong count for counter %d: %d / %d", 
 					i, counter.Value, b.N)
@@ -65,7 +65,7 @@ func BenchmarkContention(b *testing.B) {
 	db.CreateType("counters", 1, &TestCounter{}, nil)
 
 	db.Transact(func (t *Transaction) {
-		t.SetObj("counters", "contended", &TestCounter{Value: 0})
+		t.Set("counters", "contended", &TestCounter{Value: 0})
 	}, 0)
 
 	b.StartTimer()
@@ -81,7 +81,7 @@ func BenchmarkContention(b *testing.B) {
 
 	db.Transact(func (t *Transaction) {
 		var target = b.N * procs
-		var counter = t.ReadObj("counters", "contended").(*TestCounter)
+		var counter = t.Read("counters", "contended").(*TestCounter)
 		if counter.Value != target {
 			b.Errorf("Wrong count for counter: %d / %d", 
 				counter.Value, target)
@@ -102,6 +102,6 @@ func LoopIncrement(db *LogeDB, key LogeKey, group *sync.WaitGroup, count int) {
 
 
 func Increment(trans *Transaction, key LogeKey) {
-	var counter = trans.WriteObj("counters", key).(*TestCounter)
+	var counter = trans.Write("counters", key).(*TestCounter)
 	counter.Value += 1
 }

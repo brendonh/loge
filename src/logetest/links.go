@@ -16,15 +16,15 @@ func LinkSandbox() {
 	})
 
 	db.Transact(func (t *loge.Transaction) {
-		t.SetObj("person", "Brendon", &Person{ "Brendon", 31, []uint16{} })
-		t.SetObj("person", "Mike", &Person{ "Mike", 38, []uint16{} })
-		t.SetObj("pet", "Ted", &Pet { "Ted", "dog" })
-		t.SetObj("pet", "Bones", &Pet { "Bones", "dog" })
-		t.SetObj("pet", "BaoBao", &Pet { "BaoBao", "dog" })
-		t.SetObj("pet", "Ruby", &Pet { "Ruby", "dog" })
-		t.SetObj("pet", "HenYou", &Pet { "HenYou", "dog" })
-		t.SetObj("pet", "Garcon", &Pet { "Garcon", "dog" })
-		t.SetObj("pet", "Flower", &Pet { "Flower", "cat" })
+		t.Set("person", "Brendon", &Person{ "Brendon", 31, []uint16{} })
+		t.Set("person", "Mike", &Person{ "Mike", 38, []uint16{} })
+		t.Set("pet", "Ted", &Pet { "Ted", "dog" })
+		t.Set("pet", "Bones", &Pet { "Bones", "dog" })
+		t.Set("pet", "BaoBao", &Pet { "BaoBao", "dog" })
+		t.Set("pet", "Ruby", &Pet { "Ruby", "dog" })
+		t.Set("pet", "HenYou", &Pet { "HenYou", "dog" })
+		t.Set("pet", "Garcon", &Pet { "Garcon", "dog" })
+		t.Set("pet", "Flower", &Pet { "Flower", "cat" })
 
 		t.SetLinks("pet", "owner", "Ted", []loge.LogeKey{"Brendon"})
 		t.SetLinks("pet", "owner", "Bones", []loge.LogeKey{"Brendon"})
@@ -82,10 +82,10 @@ func LinkBench() {
 	fmt.Printf("Inserting...\n")
 
 	db.Transact(func (t *loge.Transaction) {
-		t.SetObj("person", "Brendon", &Person{ "Brendon", 31, []uint16{} })
+		t.Set("person", "Brendon", &Person{ "Brendon", 31, []uint16{} })
 		for i := 0; i < 10000; i++ {
 			var key = fmt.Sprintf("pet-%d", i)
-			t.SetObj("pet", loge.LogeKey(key), &Pet { key, "dog" })
+			t.Set("pet", loge.LogeKey(key), &Pet { key, "dog" })
 			t.AddLink("pet", "owner", loge.LogeKey(key), "Brendon")
 		}
 	}, 0)

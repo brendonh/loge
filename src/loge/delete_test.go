@@ -8,11 +8,11 @@ func TestSimpleDelete(test *testing.T) {
 	db.CreateType("test", 1, &TestObj{}, nil)
 
 	db.Transact(func (t *Transaction) {
-		t.SetObj("test", "one", &TestObj{Name: "One"})
+		t.Set("test", "one", &TestObj{Name: "One"})
 	}, 0)
 
 	db.Transact(func (t *Transaction) {
-		t.DeleteObj("test", "one")
+		t.Delete("test", "one")
 		if t.Exists("test", "one") {
 			test.Error("Deleted object exists in same transaction")
 		}
@@ -25,14 +25,14 @@ func TestSimpleDelete(test *testing.T) {
 	}, 0)
 
 	db.Transact(func (t *Transaction) {
-		t.SetObj("test", "one", &TestObj{Name: "One Again"})
+		t.Set("test", "one", &TestObj{Name: "One Again"})
 		if !t.Exists("test", "one") {
 			test.Error("Re-created object doesn't exist in same transaction")
 		}
 	}, 0)
 
 	db.Transact(func (t *Transaction) {
-		var one = t.ReadObj("test", "one").(*TestObj)
+		var one = t.Read("test", "one").(*TestObj)
 		if one.Name != "One Again" {
 			test.Error("Re-created object has wrong name")
 		}
@@ -45,16 +45,16 @@ func TestDeleteScoping(test *testing.T) {
 	db.CreateType("test", 1, &TestObj{}, nil)
 
 	db.Transact(func (t *Transaction) {
-		t.SetObj("test", "one", &TestObj{Name: "One"})
+		t.Set("test", "one", &TestObj{Name: "One"})
 	}, 0)
 
 
 	var trans1 = db.CreateTransaction()
 	var trans2 = db.CreateTransaction()
 
-	trans1.ReadObj("test", "one")
+	trans1.Read("test", "one")
 
-	trans2.DeleteObj("test", "one")
+	trans2.Delete("test", "one")
 
 	if !trans1.Exists("test", "one") {
 		test.Error("Deleted object missing across transaction")

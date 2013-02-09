@@ -46,23 +46,23 @@ func (t *Transaction) Exists(typeName string, key LogeKey) bool {
 }
 
 
-func (t *Transaction) ReadObj(typeName string, key LogeKey) interface{} {
+func (t *Transaction) Read(typeName string, key LogeKey) interface{} {
 	return t.getObj(makeObjRef(typeName, key), false, true).Object
 }
 
 
-func (t *Transaction) WriteObj(typeName string, key LogeKey) interface{} {
+func (t *Transaction) Write(typeName string, key LogeKey) interface{} {
 	return t.getObj(makeObjRef(typeName, key), true, true).Object
 }
 
 
-func (t *Transaction) SetObj(typeName string, key LogeKey, obj interface{}) {
+func (t *Transaction) Set(typeName string, key LogeKey, obj interface{}) {
 	var version = t.getObj(makeObjRef(typeName, key), true, false)
 	version.Object = obj
 }
 
 
-func (t *Transaction) DeleteObj(typeName string, key LogeKey) {
+func (t *Transaction) Delete(typeName string, key LogeKey) {
 	var version = t.getObj(makeObjRef(typeName, key), true, true)
 	version.Object = version.LogeObj.Type.NilValue()
 }

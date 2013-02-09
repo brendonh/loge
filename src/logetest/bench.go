@@ -54,7 +54,7 @@ func WritePeopleBatch(db *loge.LogeDB, start int, end int, tokens chan bool) {
 				Name: name,
 				Age: uint32(i),
 			}
-			t.SetObj("person", loge.LogeKey(name), &person)
+			t.Set("person", loge.LogeKey(name), &person)
 		}
 	}, 0)
 	tokens<- true

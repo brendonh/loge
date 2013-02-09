@@ -14,7 +14,7 @@ func Example() {
 	// Create an object
 
 	db.Transact(func(trans *loge.Transaction) {
-		trans.SetObj("person", "brendon", &Person{ Name: "Brendon", Age: 31 })
+		trans.Set("person", "brendon", &Person{ Name: "Brendon", Age: 31 })
 	}, 0)
 
 
@@ -23,7 +23,7 @@ func Example() {
 
 	db.Transact(func(trans *loge.Transaction) {
 		if trans.Exists("person", "brendon") {
-			var brendon = trans.WriteObj("person", "brendon").(*Person)
+			var brendon = trans.Write("person", "brendon").(*Person)
 
 			fmt.Printf("Existing Brendon: %v\n", brendon)
 
@@ -31,7 +31,7 @@ func Example() {
 			brendon.Age = 41
 		}
 
-		var defaultObj = trans.ReadObj("person", "someone else").(*Person)
+		var defaultObj = trans.Read("person", "someone else").(*Person)
 		fmt.Printf("Default value: %v\n", defaultObj)
 	}, 0)
 
@@ -40,7 +40,7 @@ func Example() {
 	// Check the update
 
 	db.Transact(func(trans *loge.Transaction) {
-		var brendon = trans.ReadObj("person", "brendon").(*Person)
+		var brendon = trans.Read("person", "brendon").(*Person)
 		fmt.Printf("Updated Brendon: %v\n", brendon)
 	}, 0)
 
@@ -51,8 +51,8 @@ func Example() {
 	var trans1 = db.CreateTransaction()
 	var trans2 = db.CreateTransaction()
 
-	trans1.SetObj("person", "nai", &Person{ Name: "Nai Yu", Age: 32 })
-	trans2.SetObj("person", "nai", &Person{ Name: "Not Nai Yu", Age: 16 })
+	trans1.Set("person", "nai", &Person{ Name: "Nai Yu", Age: 32 })
+	trans2.Set("person", "nai", &Person{ Name: "Not Nai Yu", Age: 16 })
 
 	fmt.Printf("Commit 1: %v\n", trans1.Commit())
 	fmt.Printf("Commit 2: %v\n", trans2.Commit())
@@ -62,7 +62,7 @@ func Example() {
 	// Check which succeeded
 
 	db.Transact(func(trans *loge.Transaction) {
-		var nai = trans.ReadObj("person", "nai")
+		var nai = trans.Read("person", "nai")
 		fmt.Printf("Nai: %v\n", nai)
 	}, 0)
 }

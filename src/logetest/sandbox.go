@@ -16,7 +16,7 @@ func Sandbox() {
 	})
 
 	db.Transact(func(trans *loge.Transaction) {
-		var prev = trans.ReadObj("person", "brendon").(*Person)
+		var prev = trans.Read("person", "brendon").(*Person)
 
 		fmt.Printf("Previous: %v\n", prev)
 
@@ -26,10 +26,10 @@ func Sandbox() {
 			Bits: []uint16{1,4,3},
 		}
 		
-		trans.SetObj("person", "brendon", &brend)
+		trans.Set("person", "brendon", &brend)
 	}, 0)
 
 	db.Transact(func(trans *loge.Transaction) {
-		trans.DeleteObj("person", "brendon")
+		trans.Delete("person", "brendon")
 	}, 0)
 }
