@@ -8,28 +8,20 @@ import (
 func Sandbox() {
 	var db = loge.NewLogeDB(loge.NewLevelDBStore("data/sandbox"))
 
-	db.CreateType("person", 1, &Person{}, nil)
+	db.CreateType("person", 1, &Person{}, loge.LinkSpec{ "friend": "person" })
 
-	db.CreateType("pet", 1, &Pet{}, loge.LinkSpec{
-		"owner": "person",
-		"friend": "pet",
-	})
+	var trans1 = db.CreateTransaction()
+	var trans2 = db.CreateTransaction()
 
-	db.Transact(func(trans *loge.Transaction) {
-		var prev = trans.Read("person", "brendon").(*Person)
+	trans1.Set("person", "Brendon", &Person{ "Brendon", 31, nil })
+	trans1.Set("person", "Mike", &Person{ "Mike", 38, nil })
+	trans1.SetLinks("person", "friend", "Brendon", []loge.LogeKey{ "Mike" })
 
-		fmt.Printf("Previous: %v\n", prev)
+	fmt.Printf("%v\n", trans1.Find("person", "friend", "Mike").All())
 
-		var brend = Person{ 
-			Name: "Brendon", 
-			Age: 32,
-			Bits: []uint16{1,4,3},
-		}
-		
-		trans.Set("person", "brendon", &brend)
-	}, 0)
+	trans1.Commit()
 
-	db.Transact(func(trans *loge.Transaction) {
-		trans.Delete("person", "brendon")
-	}, 0)
+	fmt.Printf("%v\n", trans2.Find("person", "friend", "Mike").All())
+
+	fmt.Printf("%v\n", db.Find("person", "friend", "Mike").All())
 }

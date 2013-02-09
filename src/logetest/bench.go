@@ -11,15 +11,22 @@ const TOTAL = 1000000
 const BATCH_SIZE = 10000
 
 func WriteBench() {
-	var db = loge.NewLogeDB(loge.NewLevelDBStore("data/bench"))
-
-	defer db.Close()
-
-	db.CreateType("person", 1, &Person{}, nil)
-
 	var cores = runtime.NumCPU()
 	fmt.Printf("Using %d cores\n", cores)
 	runtime.GOMAXPROCS(cores)
+
+	DoWrite(cores, 0)
+	DoWrite(cores, 1)
+	DoWrite(cores, 2)
+	DoWrite(cores, 3)
+	DoWrite(cores, 4)
+
+}
+
+func DoWrite(cores int, idx int) {
+	var db = loge.NewLogeDB(loge.NewLevelDBStore(fmt.Sprintf("data/bench%d", idx)))
+	defer db.Close()
+	db.CreateType("person", 1, &Person{}, nil)
 
 	var startTime = time.Now()
 
@@ -42,8 +49,11 @@ func WriteBench() {
 	}
 
 	fmt.Printf("Done in %v\n", time.Since(startTime))
-}
+	db.FlushCache()
 
+	fmt.Printf("Flushed\n")
+
+}
 
 func WritePeopleBatch(db *loge.LogeDB, start int, end int, tokens chan bool) {
 	db.Transact(func(t *loge.Transaction) {

@@ -9,6 +9,7 @@ type LogeStore interface {
 }
 
 type ResultSet interface {
+	All() []LogeKey
 	Next() LogeKey
 	Valid() bool
 	Close()
@@ -25,6 +26,7 @@ type storeContext interface {
 type transactionContext interface {
 	storeContext
 	commit() error
+	rollback()
 }
 
 type objectMap map[string]map[LogeKey]interface{}
@@ -163,6 +165,9 @@ func (context *memContext) commit() error {
 		store.objects[entry.TypeKey][entry.ObjKey] = entry.Value
 	}
 	return nil
+}
+
+func (context *memContext) rollback() {
 }
 
 

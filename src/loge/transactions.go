@@ -19,6 +19,7 @@ const (
 
 type Transaction struct {
 	db *LogeDB
+	context transactionContext
 	versions map[string]*objectVersion
 	state TransactionState
 }
@@ -26,6 +27,7 @@ type Transaction struct {
 func NewTransaction(db *LogeDB) *Transaction {
 	return &Transaction{
 		db: db,
+		context: db.store.newContext(),
 		versions: make(map[string]*objectVersion),
 		state: ACTIVE,
 	}
@@ -91,6 +93,10 @@ func (t *Transaction) SetLinks(typeName string, linkName string, key LogeKey, ta
 		stringTargets = append(stringTargets, string(key))
 	}
 	t.getLink(makeLinkRef(typeName, linkName, key), true, true).Set(stringTargets)
+}
+
+func (t *Transaction) Find(typeName string, linkName string, target LogeKey) ResultSet {
+	return t.context.find(t.db.types[typeName], linkName, target)
 }
 
 // -----------------------------------------------
@@ -186,15 +192,16 @@ func (t *Transaction) tryCommit() bool {
 		}
 	}
 
-	var batch = t.db.store.newContext()
+	var context = t.context
+
 	for _, version := range t.versions {
 		version.LogeObj.RefCount--
 		if version.Dirty {
-			version.LogeObj.applyVersion(version, batch)
+			version.LogeObj.applyVersion(version, context)
 		}
 	}
 
-	var err = batch.commit()
+	var err = context.commit()
 	if err != nil {
 		t.state = ERROR
 		fmt.Printf("Commit error: %v\n", err)

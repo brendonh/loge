@@ -44,6 +44,8 @@ type levelDBResultSet struct {
 
 type levelDBContext struct {
 	ldbStore *levelDBStore
+	snapshot *levigo.Snapshot
+	readOptions *levigo.ReadOptions
 	batch []levelDBWriteEntry
 	result chan error
 }
@@ -54,8 +56,8 @@ type levelDBWriteEntry struct {
 	Delete bool
 }
 
-var writeOptions = levigo.NewWriteOptions()
-var readOptions = levigo.NewReadOptions()
+var defaultWriteOptions = levigo.NewWriteOptions()
+var defaultReadOptions = levigo.NewReadOptions()
 
 func NewLevelDBStore(basePath string) LogeStore {
 
@@ -111,7 +113,7 @@ func (store *levelDBStore) registerType(typ *logeType) {
 		panic(fmt.Sprintf("Error encoding type %s: %v", vt.Name, err))
 	}
 
-	err = store.db.Put(writeOptions, keyVal, typeVal)
+	err = store.db.Put(defaultWriteOptions, keyVal, typeVal)
 	
 	if err != nil {
 		panic(fmt.Sprintf("Couldn't write type metadata: %v\n", err))
@@ -125,11 +127,11 @@ func (store *levelDBStore) GetType(typeName string) *spack.VersionedType {
 }
 
 func (store *levelDBStore) Put(key []byte, val []byte) error {
-	return store.db.Put(writeOptions, key, val)
+	return store.db.Put(defaultWriteOptions, key, val)
 }
 
 func (store *levelDBStore) Delete(key []byte) error {
-	return store.db.Delete(writeOptions, key)
+	return store.db.Delete(defaultWriteOptions, key)
 }
 
 
@@ -137,7 +139,7 @@ func (store *levelDBStore) get(typ *logeType, key LogeKey) interface{} {
 	var vt = store.types.Type(typ.Name)
 	var encKey = vt.EncodeKey(string(key))
 
-	val, err := store.db.Get(readOptions, encKey)
+	val, err := store.db.Get(defaultReadOptions, encKey)
 
 	if err != nil {
 		panic(fmt.Sprintf("Read error: %v\n", err))
@@ -166,7 +168,7 @@ func (store *levelDBStore) getLinks(typ *logeType, linkName string, objKey LogeK
 
 	var key = encodeTaggedKey([]uint16{ldb_LINK_TAG, vt.Tag, linkInfo.Tag}, string(objKey))
 
-	val, err := store.db.Get(readOptions, key)
+	val, err := store.db.Get(defaultReadOptions, key)
 
 	if err != nil {
 		panic(fmt.Sprintf("Read error: %v\n", err))
@@ -194,32 +196,8 @@ func (store *levelDBStore) storeLinks(obj *logeObject) error {
 // Search
 // -----------------------------------------------
 
-func (store *levelDBStore) find(typ *logeType, linkName string, target LogeKey) ResultSet {
-	var vt = store.types.Type(typ.Name)
-	var linkInfo = typ.Links[linkName]
-
-	var prefix = append(
-		encodeTaggedKey([]uint16{ldb_INDEX_TAG, vt.Tag, linkInfo.Tag}, string(target)),
-		0)
-
-	var it = store.iteratePrefix(prefix)
-	if !it.Valid() {
-		it.Close()
-		return &levelDBResultSet {
-			closed: true,
-		}
-	}
-
-	var prefixLen = len(prefix)
-
-	var next = string(it.Key()[prefixLen:])
-
-	return &levelDBResultSet{
-		it: it,
-		prefixLen: prefixLen,
-		next: next,
-		closed: false,
-	}
+func (store *levelDBStore) find(typ *logeType, linkName string, key LogeKey) ResultSet {
+	return ldb_find(store, defaultReadOptions, typ, linkName, key)
 }
 
 func (rs *levelDBResultSet) Valid() bool {
@@ -240,6 +218,14 @@ func (rs *levelDBResultSet) Next() LogeKey {
 	return LogeKey(next)
 }
 
+func (rs *levelDBResultSet) All() []LogeKey {
+	var keys = make([]LogeKey, 0)
+	for rs.Valid() {
+		keys = append(keys, rs.Next())
+	}
+	return keys
+}
+
 func (rs *levelDBResultSet) Close() {
 	rs.it.Close()
 	rs.closed = true
@@ -247,12 +233,17 @@ func (rs *levelDBResultSet) Close() {
 
 
 // -----------------------------------------------
-// Write Batches
+// Transaction Contexts
 // -----------------------------------------------
 
 func (store *levelDBStore) newContext() transactionContext {
+	var snapshot = store.db.NewSnapshot()
+	var options = levigo.NewReadOptions()
+	options.SetSnapshot(snapshot)
 	return &levelDBContext{
 		ldbStore: store,
+		readOptions: options,
+		snapshot: snapshot,
 		batch: make([]levelDBWriteEntry, 0),
 		result: make(chan error),
 	}
@@ -287,7 +278,17 @@ func (context *levelDBContext) Delete(key []byte) error {
 
 func (context *levelDBContext) commit() error {
 	context.ldbStore.writeQueue <- context
-	return <-context.result
+	var err = <-context.result
+	context.cleanup()
+	return err
+}
+
+func (context *levelDBContext) rollback() {
+	context.cleanup()
+}
+
+func (context *levelDBContext) cleanup() {
+	context.ldbStore.db.ReleaseSnapshot(context.snapshot)
 }
 
 func (context *levelDBContext) Write() error {
@@ -301,7 +302,7 @@ func (context *levelDBContext) Write() error {
 		}
 	}
 
-	return context.ldbStore.db.Write(writeOptions, wb)
+	return context.ldbStore.db.Write(defaultWriteOptions, wb)
 }
 
 func (context *levelDBContext) store(obj *logeObject) error {
@@ -313,7 +314,7 @@ func (context *levelDBContext) storeLinks(obj *logeObject) error {
 }
 
 func (context *levelDBContext) find(typ *logeType, linkName string, target LogeKey) ResultSet {
-	return context.ldbStore.find(typ, linkName, target)
+	return ldb_find(context.ldbStore, context.readOptions, typ, linkName, target)
 }
 
 func (context *levelDBContext) get(typ *logeType, key LogeKey) interface{} {
@@ -331,7 +332,7 @@ func (context *levelDBContext) getLinks(typ *logeType, linkName string, key Loge
 func (store *levelDBStore) loadTypeMetadata() {
 	var typeType = store.types.Type("_type")
 	var tag = typeType.EncodeTag()
-	var it = store.iteratePrefix(tag)
+	var it = store.iteratePrefix(tag, defaultReadOptions)
 	defer it.Close()
 
 	for it = it; it.Valid(); it.Next() {
@@ -347,7 +348,7 @@ func (store *levelDBStore) loadTypeMetadata() {
 
 func (store *levelDBStore) tagVersions(vt *spack.VersionedType, typ *logeType) {
 	var prefix = encodeTaggedKey([]uint16{ldb_LINK_INFO_TAG, vt.Tag}, "")
-	var it = store.iteratePrefix(prefix)
+	var it = store.iteratePrefix(prefix, defaultReadOptions)
 	defer it.Close()
 
 	for it = it; it.Valid(); it.Next() {
@@ -375,7 +376,7 @@ func (store *levelDBStore) tagVersions(vt *spack.VersionedType, typ *logeType) {
 		var key = encodeTaggedKey([]uint16{ldb_LINK_INFO_TAG, vt.Tag}, info.Name)
 		enc, _ := spack.EncodeToBytes(info, linkInfoSpec)
 		fmt.Printf("Updating link: %s::%s (%d)\n", typ.Name, info.Name, info.Tag)
-		var err = store.db.Put(writeOptions, key, enc)
+		var err = store.db.Put(defaultWriteOptions, key, enc)
 		if err != nil {
 			panic(fmt.Sprintf("Write error: %v\n", err))
 		}
@@ -410,6 +411,38 @@ func encodeIndexKey(prefix []byte, target string, source string) []byte {
 // -----------------------------------------------
 // Levigo interaction
 // -----------------------------------------------
+
+func ldb_find(store *levelDBStore, readOptions *levigo.ReadOptions,
+	typ *logeType, linkName string, target LogeKey) ResultSet {
+
+	fmt.Printf("Find options %v\n", readOptions)
+
+	var vt = store.types.Type(typ.Name)
+	var linkInfo = typ.Links[linkName]
+
+	var prefix = append(
+		encodeTaggedKey([]uint16{ldb_INDEX_TAG, vt.Tag, linkInfo.Tag}, string(target)),
+		0)
+
+	var it = store.iteratePrefix(prefix, readOptions)
+	if !it.Valid() {
+		it.Close()
+		return &levelDBResultSet {
+			closed: true,
+		}
+	}
+
+	var prefixLen = len(prefix)
+
+	var next = string(it.Key()[prefixLen:])
+
+	return &levelDBResultSet{
+		it: it,
+		prefixLen: prefixLen,
+		next: next,
+		closed: false,
+	}
+}
 
 func ldb_store(writer levelDBWriter, obj *logeObject) error {
 	var vt = writer.GetType(obj.Type.Name)
@@ -473,7 +506,7 @@ type prefixIterator struct {
 	Finished bool
 }
 
-func (store *levelDBStore) iteratePrefix(prefix []byte) *prefixIterator {
+func (store *levelDBStore) iteratePrefix(prefix []byte, readOptions *levigo.ReadOptions) *prefixIterator {
 	var it = store.db.NewIterator(readOptions)
 	it.Seek(prefix)
 
