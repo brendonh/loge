@@ -17,9 +17,10 @@ type logeObject struct {
 
 type objectVersion struct {
 	LogeObj *logeObject
-	Version int
 	Object interface{}
 	Dirty bool
+	snapshotID uint64
+	Previous *objectVersion
 }
 
 
@@ -34,22 +35,35 @@ func initializeObject(db *LogeDB, t *logeType, key LogeKey) *logeObject {
 	}
 }
 
+func (obj *logeObject) getTransactionVersion(sID uint64) *objectVersion {
+	var version = obj.Current
+	for version.snapshotID > sID {
+		version = version.Previous
+		if version == nil {
+			panic("Couldn't find version")
+		}
+	}
+	return version
+}
 
-func (obj *logeObject) newVersion() *objectVersion {
-	var current = obj.Current
+func (obj *logeObject) newVersion(sID uint64) *objectVersion {
+	var current = obj.getTransactionVersion(sID)
 
 	var newObj = obj.Type.Copy(current.Object)
 
 	return &objectVersion{
 		LogeObj: obj,
-		Version: current.Version + 1,
 		Object: newObj,
 		Dirty: true,
+		Previous: obj.Current,
+		snapshotID: current.snapshotID,
 	}
 }
 
-func (obj *logeObject) applyVersion(version *objectVersion, context storeContext) {
+func (obj *logeObject) applyVersion(version *objectVersion, context storeContext, sID uint64) {
+	version.snapshotID = sID
 	obj.Current = version
+	obj.Loaded = true
 
 	if obj.LinkName == "" {
 		context.store(obj)

@@ -22,14 +22,16 @@ type Transaction struct {
 	context transactionContext
 	versions map[string]*objectVersion
 	state TransactionState
+	snapshotID uint64
 }
 
-func NewTransaction(db *LogeDB) *Transaction {
+func NewTransaction(db *LogeDB, sID uint64) *Transaction {
 	return &Transaction{
 		db: db,
 		context: db.store.newContext(),
 		versions: make(map[string]*objectVersion),
 		state: ACTIVE,
+		snapshotID: sID,
 	}
 }
 
@@ -125,7 +127,7 @@ func (t *Transaction) getObj(ref objRef, forWrite bool, load bool) *objectVersio
 	if ok {
 		if forWrite {
 			if !version.Dirty {
-				version = version.LogeObj.newVersion()
+				version = version.LogeObj.newVersion(t.snapshotID)
 				t.versions[objKey] = version
 			}
 		}
@@ -140,9 +142,9 @@ func (t *Transaction) getObj(ref objRef, forWrite bool, load bool) *objectVersio
 	logeObj.RefCount++
 
 	if forWrite {
-		version = logeObj.newVersion()
+		version = logeObj.newVersion(t.snapshotID)
 	} else {
-		version = logeObj.Current
+		version = logeObj.getTransactionVersion(t.snapshotID)
 	}
 
 	t.versions[objKey] = version
@@ -183,26 +185,20 @@ func (t *Transaction) tryCommit() bool {
 		}
 		defer obj.Lock.Unlock()
 
-		var expectedVersion int
-		if version.Dirty {
-			expectedVersion = obj.Current.Version + 1
-		} else {
-			expectedVersion = obj.Current.Version
-		}
-
-		if version.Version != expectedVersion {
+		if obj.Current.snapshotID > t.snapshotID {
 			t.state = ABORTED
 			return true
 		}
 	}
 
 	var context = t.context
+	var sID = t.db.newSnapshotID()
 
 	for _, version := range t.versions {
-		version.LogeObj.RefCount--
 		if version.Dirty {
-			version.LogeObj.applyVersion(version, context)
+			version.LogeObj.applyVersion(version, context, sID)
 		}
+		version.LogeObj.RefCount--
 	}
 
 	var err = context.commit()

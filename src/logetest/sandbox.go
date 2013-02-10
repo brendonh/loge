@@ -27,9 +27,9 @@ func Sandbox() {
 
 	db.SetOne("person", "Another", &Person{ "Another", 19, nil })
 	
-	fmt.Printf("%v\n", db.DirtyRead("person", "Another"))
+	fmt.Printf("%v\n", db.ReadOne("person", "Another"))
 
 	db.DeleteOne("person", "Another")
 
-	fmt.Printf("%v\n", db.DirtyRead("person", "Another"))
+	fmt.Printf("%v\n", db.ReadOne("person", "Another"))
 }

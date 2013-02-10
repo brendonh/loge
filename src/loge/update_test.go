@@ -40,6 +40,38 @@ func TestReadWrite(test *testing.T) {
 	}, 0)
 }
 
+func TestReadScoping(test *testing.T) {
+	var db = NewLogeDB(NewMemStore())
+	db.CreateType("test", 1, &TestObj{}, nil)
+
+	var trans1 = db.CreateTransaction()
+	var trans2 = db.CreateTransaction()
+
+	trans1.Set("test", "one", &TestObj{Name: "One"})
+
+	trans1.Commit()
+
+	if trans2.Read("test", "one").(*TestObj) != nil {
+		test.Errorf("Version visible in transaction created before obj create")
+	}
+
+	// Now on existing object
+
+	var trans3 = db.CreateTransaction()
+	var trans4 = db.CreateTransaction()
+
+	trans3.Set("test", "one", &TestObj{Name: "Two"})
+	trans3.Commit()
+
+	if trans4.Read("test", "one").(*TestObj).Name != "One" {
+		test.Errorf("Version visible in transaction created before update")
+	}
+
+	if db.ReadOne("test", "one").(*TestObj).Name != "Two" {
+		test.Errorf("Dirty read got wrong version")
+	}
+}
+
 func TestUpdateScoping(test *testing.T) {
 	var db = NewLogeDB(NewMemStore())
 	db.CreateType("test", 1, &TestObj{}, nil)

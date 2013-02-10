@@ -3,12 +3,14 @@ package loge
 import (
 	"fmt"
 	"time"
+	"sync/atomic"
 )
 
 type LogeDB struct {
 	types typeMap
 	store LogeStore
 	cache objCache
+	lastSnapshotID uint64
 	lock spinLock
 }
 
@@ -17,6 +19,7 @@ func NewLogeDB(store LogeStore) *LogeDB {
 		types: make(typeMap),
 		store: store,
 		cache: make(objCache),
+		lastSnapshotID: 1,
 	}
 }
 
@@ -89,7 +92,12 @@ func (db *LogeDB) CreateType(name string, version uint16, exemplar interface{}, 
 
 
 func (db *LogeDB) CreateTransaction() *Transaction {
-	return NewTransaction(db)
+	var tID = db.lastSnapshotID
+	return NewTransaction(db, tID)
+}
+
+func (db *LogeDB) newSnapshotID() uint64 {
+	return atomic.AddUint64(&db.lastSnapshotID, 1)
 }
 
 func (db *LogeDB) Transact(actor Transactor, timeout time.Duration) bool {
@@ -130,15 +138,15 @@ func (db *LogeDB) FlushCache() int {
 }
 
 // -----------------------------------------------
-// Dirty Operations
+// One-shot Operations
 // -----------------------------------------------
 
-func (db *LogeDB) DirtyExists(typeName string, key LogeKey) bool {
+func (db *LogeDB) ExistsOne(typeName string, key LogeKey) bool {
 	var obj = db.store.get(db.types[typeName], key)
 	return obj != nil
 }
 
-func (db *LogeDB) DirtyRead(typeName string, key LogeKey) interface{} {
+func (db *LogeDB) ReadOne(typeName string, key LogeKey) interface{} {
 	var typ = db.types[typeName]
 	var obj = db.store.get(typ, key)
 	if obj == nil {
@@ -147,7 +155,7 @@ func (db *LogeDB) DirtyRead(typeName string, key LogeKey) interface{} {
 	return obj
 }
 
-func (db *LogeDB) DirtyReadLinks(typeName string, linkName string, key LogeKey) []string {
+func (db *LogeDB) ReadLinksOne(typeName string, linkName string, key LogeKey) []string {
 	return db.store.getLinks(db.types[typeName], linkName, key)
 }
 
@@ -184,7 +192,7 @@ func (db *LogeDB) ensureObj(ref objRef, load bool) *logeObject {
 
 	if !ok {
 		obj = initializeObject(db, typ, key)
-	}
+	} 
 
 	obj.Lock.SpinLock()
 	defer obj.Lock.Unlock()
@@ -205,7 +213,6 @@ func (db *LogeDB) ensureObj(ref objRef, load bool) *logeObject {
 		linkSet.Original = links
 		version = &objectVersion {
 			LogeObj: obj,
-			Version: 0,
 			Object: linkSet,
 		}
 		obj.LinkName = ref.LinkName
@@ -223,7 +230,6 @@ func (db *LogeDB) ensureObj(ref objRef, load bool) *logeObject {
 		}
 
 		version = &objectVersion{
-			Version: 0,
 			Object: object,
 		}
 

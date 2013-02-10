@@ -15,6 +15,6 @@ func main() {
 	//LinkBench()
 	//LinkSandbox()
 	//WriteBench()
-	Sandbox()
-	//Example()
+	//Sandbox()
+	Example()
 }

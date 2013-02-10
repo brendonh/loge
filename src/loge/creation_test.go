@@ -1,6 +1,8 @@
 package loge
 
-import "testing"
+import (
+	"testing"
+)
 
 type TestObj struct {
 	Name string
@@ -13,7 +15,6 @@ func TestSimpleCreation(test *testing.T) {
 
 	db.Transact(func(t *Transaction) {
 		t.Set("test", "one", &TestObj{Name: "One"})
-
 		var one = t.Read("test", "one").(*TestObj)
 		if one.Name != "One" {
 			test.Error("Created object missing in transaction")
@@ -49,8 +50,8 @@ func TestCreationScoping(test *testing.T) {
 		test.Error("Created object became visible after commit")
 	}
 
-	if !trans3.Exists("test", "one") {
-		test.Error("Created object not visible when first read after commit")
+	if trans3.Exists("test", "one") {
+		test.Error("Created object visible when first read after commit")
 	}
 }
 
