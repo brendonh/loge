@@ -151,6 +151,18 @@ func (db *LogeDB) DirtyReadLinks(typeName string, linkName string, key LogeKey) 
 	return db.store.getLinks(db.types[typeName], linkName, key)
 }
 
+func (db *LogeDB) SetOne(typeName string, key LogeKey, obj interface{}) {
+	db.Transact(func (t *Transaction) {
+		t.Set(typeName, key, obj)
+	}, 0)
+}
+
+func (db *LogeDB) DeleteOne(typeName string, key LogeKey) {
+	db.Transact(func (t *Transaction) {
+		t.Delete(typeName, key)
+	}, 0)
+}
+
 // -----------------------------------------------
 // Internals
 // -----------------------------------------------

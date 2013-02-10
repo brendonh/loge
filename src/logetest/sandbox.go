@@ -24,4 +24,12 @@ func Sandbox() {
 	fmt.Printf("%v\n", trans2.Find("person", "friend", "Mike").All())
 
 	fmt.Printf("%v\n", db.Find("person", "friend", "Mike").All())
+
+	db.SetOne("person", "Another", &Person{ "Another", 19, nil })
+	
+	fmt.Printf("%v\n", db.DirtyRead("person", "Another"))
+
+	db.DeleteOne("person", "Another")
+
+	fmt.Printf("%v\n", db.DirtyRead("person", "Another"))
 }
