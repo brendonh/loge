@@ -4,7 +4,7 @@ loge -- Go object database
 Current Features:
 
 * Stores Go objects
-* Arbitrary ACID transactions
+* Arbitrary ACID transactions with MVCC
 * Durability via leveldb storage layer
 * Link sets for objects, and reverse lookups on them
 * Fast-ish
