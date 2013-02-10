@@ -8,8 +8,50 @@ import (
 )
 
 type TestCounter struct {
-	Value int
+	Value uint32
 }
+
+// func TestNoContention(b *testing.T) {
+
+// 	var N = 50000
+
+// 	var procs = runtime.NumCPU()
+// 	var origProcs = runtime.GOMAXPROCS(procs)
+
+// 	var db = NewLogeDB(NewMemStore())
+// 	db.CreateType("counters", 1, &TestCounter{}, nil)
+
+// 	db.Transact(func (t *Transaction) {
+// 		for i := 0; i < procs; i++ {
+// 			var key LogeKey = LogeKey(strconv.Itoa(i))
+// 			t.Set("counters", key, &TestCounter{Value: 0})
+// 		}
+// 	}, 0)
+
+
+// 	var group sync.WaitGroup
+// 	for i := 0; i < procs; i++ {
+// 		var key = LogeKey(strconv.Itoa(i))
+// 		group.Add(1)
+// 		go LoopIncrement(db, key, &group, N)
+// 	}
+// 	group.Wait()
+
+
+// 	db.Transact(func (t *Transaction) {
+// 		for i := 0; i < procs; i++ {
+// 			var key = LogeKey(strconv.Itoa(i))
+// 			var counter = t.Read("counters", key).(*TestCounter)
+// 			if counter.Value != uint32(N) {
+// 				b.Errorf("Wrong count for counter %d: %d / %d", 
+// 					i, counter.Value, N)
+// 			}
+// 		}
+// 	}, 0)
+
+// 	runtime.GOMAXPROCS(origProcs)
+// }
+
 
 func BenchmarkNoContention(b *testing.B) {
 	b.StopTimer()
@@ -43,7 +85,7 @@ func BenchmarkNoContention(b *testing.B) {
 		for i := 0; i < procs; i++ {
 			var key = LogeKey(strconv.Itoa(i))
 			var counter = t.Read("counters", key).(*TestCounter)
-			if counter.Value != b.N {
+			if counter.Value != uint32(b.N) {
 				b.Errorf("Wrong count for counter %d: %d / %d", 
 					i, counter.Value, b.N)
 			}
@@ -82,7 +124,7 @@ func BenchmarkContention(b *testing.B) {
 	db.Transact(func (t *Transaction) {
 		var target = b.N * procs
 		var counter = t.Read("counters", "contended").(*TestCounter)
-		if counter.Value != target {
+		if counter.Value != uint32(target) {
 			b.Errorf("Wrong count for counter: %d / %d", 
 				counter.Value, target)
 		}

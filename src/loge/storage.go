@@ -1,10 +1,14 @@
 package loge
 
+import (
+	"github.com/brendonh/spack"
+)
 
 type LogeStore interface {
 	storeContext
 	close()
 	registerType(*logeType)
+	getSpackType(name string) *spack.VersionedType
 	newContext() transactionContext
 }
 
@@ -16,13 +20,14 @@ type ResultSet interface {
 }
 
 type storeContext interface {
-	get(*logeType, LogeKey) interface{}
-	getLinks(*logeType, string, LogeKey) []string
-	store(*logeObject) error
-	storeLinks(*logeObject) error
+	get(objRef) []byte
+	store(objRef, []byte) error
 
-	find(*logeType, string, LogeKey) ResultSet
-	findFrom(*logeType, string, LogeKey, LogeKey, int) ResultSet
+	addIndex(objRef, LogeKey)
+	remIndex(objRef, LogeKey)
+
+	find(objRef, LogeKey) ResultSet
+	findSlice(objRef, LogeKey, LogeKey, int) ResultSet
 }
 
 type transactionContext interface {
@@ -31,12 +36,13 @@ type transactionContext interface {
 	rollback()
 }
 
-type objectMap map[string]map[LogeKey]interface{}
+type objectMap map[string][]byte
 
 
 type memStore struct {
 	objects objectMap
 	lock spinLock
+	spackTypes *spack.TypeSet
 }
 
 type memContext struct {
@@ -45,14 +51,14 @@ type memContext struct {
 }
 
 type memWriteEntry struct {
-	TypeKey string
-	ObjKey LogeKey
-	Value interface{}
+	CacheKey string
+	Value []byte
 }
 
 func NewMemStore() LogeStore {
 	return &memStore{
 		objects: make(objectMap),
+		spackTypes: spack.NewTypeSet(),
 	}
 }
 
@@ -60,59 +66,45 @@ func (store *memStore) close() {
 }
 
 func (store *memStore) registerType(typ *logeType) {
-	store.objects[typ.Name] = make(map[LogeKey]interface{})
-	for linkName := range typ.Links {
-		var lk = memStoreLinkKey(typ.Name, linkName)
-		store.objects[lk] = make(map[LogeKey]interface{})
-	}
+	store.spackTypes.RegisterType(typ.Name)
 }
 
-func (store *memStore) get(t *logeType, key LogeKey) interface{} {
-	var objMap = store.objects[t.Name]
-	object, ok := objMap[key]
+func (store *memStore) getSpackType(name string) *spack.VersionedType {
+	return store.spackTypes.RegisterType(name)
+}
+
+func (store *memStore) get(ref objRef) []byte {
+	enc, ok := store.objects[ref.CacheKey]
 	if !ok {
 		return nil
 	}
-	return object
+	return enc
 }
 
-func (store *memStore) getLinks(typ *logeType, linkName string, key LogeKey) []string {
-	var lk = memStoreLinkKey(typ.Name, linkName)
-	links, ok := store.objects[lk][key]
-	if ok {
-		return links.(linkList)
-	}
-
-	return linkList{}
+func (store *memStore) addIndex(ref objRef, key LogeKey) {
 }
 
-func (store *memStore) find(typ *logeType, linkName string, key LogeKey) ResultSet {
+func (store *memStore) remIndex(ref objRef, key LogeKey) {
+}
+
+func (store *memStore) find(ref objRef, key LogeKey) ResultSet {
 	// Until I can be bothered
 	panic("Find not implemented on memstore")
 }
 
-func (store *memStore) findFrom(typ *logeType, linkName string, key LogeKey, from LogeKey, limit int) ResultSet {
+func (store *memStore) findSlice(ref objRef, key LogeKey, from LogeKey, limit int) ResultSet {
 	// Until I can be bothered
 	panic("Find not implemented on memstore")
 }
 
-func (store *memStore) store(obj *logeObject) error {
-	obj.Lock.SpinLock()
-	defer obj.Lock.Unlock()
-	if !obj.Current.hasValue() {
-		delete(store.objects[obj.Type.Name], obj.Key)
+func (store *memStore) store(ref objRef, enc []byte) error {
+	store.lock.SpinLock()
+	defer store.lock.Unlock()
+	if len(enc) == 0 {
+		delete(store.objects, ref.CacheKey)
 	} else {
-		store.objects[obj.Type.Name][obj.Key] = obj.Current.Object
+		store.objects[ref.CacheKey] = enc
 	}
-	return nil
-}
-
-func (store *memStore) storeLinks(obj *logeObject) error {
-	obj.Lock.SpinLock()
-	defer obj.Lock.Unlock()
-	var typeKey = memStoreLinkKey(obj.Type.Name, obj.LinkName)
-	var val = linkList(obj.Current.Object.(*linkSet).ReadKeys())
-	store.objects[typeKey][obj.Key] = val
 	return nil
 }
 
@@ -122,49 +114,32 @@ func (store *memStore) newContext() transactionContext {
 	}
 }
 
-
-func (context *memContext) get(t *logeType, key LogeKey) interface{} {
-	return context.mstore.get(t, key)
+func (context *memContext) get(ref objRef) []byte {
+	return context.mstore.get(ref)
 }
 
-func (context *memContext) getLinks(t *logeType, linkName string, key LogeKey) []string {
-	return context.mstore.getLinks(t, linkName, key)
-}
-
-func (context *memContext) store(obj *logeObject) error {
-	var val interface{}
-	if !obj.Current.hasValue() {
-		val = nil
-	} else {
-		val = obj.Current.Object
-	}
+func (context *memContext) store(ref objRef, enc []byte) error {
 	context.writes = append(
 		context.writes,
 		memWriteEntry{ 
-		TypeKey: obj.Type.Name, 
-		ObjKey: obj.Key, 
-		Value: val,
+		CacheKey: ref.CacheKey,
+		Value: enc,
 	})
 	return nil
 }
 
-func (context *memContext) storeLinks(obj *logeObject) error {
-	context.writes = append(
-		context.writes,
-		memWriteEntry{ 
-		TypeKey: memStoreLinkKey(obj.Type.Name, obj.LinkName),
-		ObjKey: obj.Key,
-		Value: linkList(obj.Current.Object.(*linkSet).ReadKeys()),
-	})
-	return nil
+
+func (context *memContext) addIndex(ref objRef, key LogeKey) {
 }
 
-func (context *memContext) find(typ *logeType, linkName string, key LogeKey) ResultSet {
+func (context *memContext) remIndex(ref objRef, key LogeKey) {
+}
+func (context *memContext) find(ref objRef, key LogeKey) ResultSet {
 	// Until I can be bothered
 	panic("Find not implemented on memstore")
 }
 
-func (context *memContext) findFrom(typ *logeType, linkName string, key LogeKey, from LogeKey, limit int) ResultSet {
+func (context *memContext) findSlice(ref objRef, key LogeKey, from LogeKey, limit int) ResultSet {
 	// Until I can be bothered
 	panic("Find not implemented on memstore")
 }
@@ -174,15 +149,14 @@ func (context *memContext) commit() error {
 	store.lock.SpinLock()
 	defer store.lock.Unlock()
 	for _, entry := range context.writes {
-		store.objects[entry.TypeKey][entry.ObjKey] = entry.Value
+		if len(entry.Value) == 0 {
+			delete(store.objects, entry.CacheKey)
+		} else {
+			store.objects[entry.CacheKey] = entry.Value
+		}
 	}
 	return nil
 }
 
 func (context *memContext) rollback() {
-}
-
-
-func memStoreLinkKey(typeName string, linkName string) string {
-	return "^" + typeName + "^" + linkName
 }

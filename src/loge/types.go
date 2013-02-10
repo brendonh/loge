@@ -2,59 +2,61 @@ package loge
 
 import (
 	"reflect"
+	"fmt"
+
+	"github.com/brendonh/spack"
 )
+
+var linkSpec *spack.TypeSpec = spack.MakeTypeSpec([]string{})
+var linkInfoSpec *spack.TypeSpec = spack.MakeTypeSpec(linkInfo{})
 
 type logeType struct {
 	Name string
 	Version uint16
 	Exemplar interface{}
+	SpackType *spack.VersionedType
 	Links map[string]*linkInfo
 }
 
+func NewType(name string, version uint16, exemplar interface{}, linkSpec LinkSpec, spackType *spack.VersionedType) *logeType {
+	var infos = make(map[string]*linkInfo)
+	for k, v := range linkSpec {
+		infos[k] = &linkInfo{
+			Name: k,
+			Target: v,
+			Tag: 0,
+		}
+	}
+
+	return &logeType {
+		Name: name,
+		Version: version,
+		Exemplar: exemplar,
+		SpackType: spackType,
+		Links: infos,
+	}
+}
 
 func (t *logeType) NilValue() interface{} {
 	return reflect.Zero(reflect.TypeOf(t.Exemplar)).Interface()
 }
 
-
-// XXX TODO: Do this via the store instead, and just re-decode spack objects for consistency
-func (t *logeType) Copy(object interface{}) interface{} {
-	var value = reflect.ValueOf(object)
-
-	if value.Kind() != reflect.Ptr || reflect.Indirect(value).Kind() != reflect.Struct {
-		return object
+func (t *logeType) Decode(enc []byte) interface{} {
+	if len(enc) == 0 {
+		return t.NilValue()
 	}
-
-	if !value.IsValid() || value.IsNil() {
-		return object
+	
+	obj, err := t.SpackType.DecodeObj(enc)
+	if err != nil {
+		panic(fmt.Sprintf("Decode error: %v", err))
 	}
+	return obj
+}
 
-	var orig = value.Elem()
-	var val = reflect.New(orig.Type()).Elem()
-	val.Set(orig)
-
-	var vt = val.Type()
-	for i := 0; i < val.NumField(); i++ {
-
-		var field = val.Field(i)
-		var ft = vt.Field(i)
-
-		switch field.Kind() {
-		case reflect.Array, 
-			reflect.Slice:
-
-			switch ft.Tag.Get("loge") {
-			case "copy":
-				var newField = reflect.New(field.Type()).Elem()
-				newField = reflect.AppendSlice(newField, field)
-				field.Set(newField)
-			case "keep":
-				// Do nothing
-			default:
-				field.Set(reflect.New(field.Type()).Elem())
-			}
-		}
+func (t *logeType) Encode(obj interface{}) []byte {
+	enc, err := t.SpackType.EncodeObj(obj)
+	if err != nil {
+		panic(fmt.Sprintf("Encode error: %v", err))
 	}
-
-	return val.Addr().Interface()
+	return enc
 }

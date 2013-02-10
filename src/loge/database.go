@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"time"
 	"sync/atomic"
+	"reflect"
+
+	"github.com/brendonh/spack"
 )
 
 type LogeDB struct {
@@ -12,6 +15,7 @@ type LogeDB struct {
 	cache objCache
 	lastSnapshotID uint64
 	lock spinLock
+	linkTypeSpec *spack.TypeSpec
 }
 
 func NewLogeDB(store LogeStore) *LogeDB {
@@ -20,6 +24,7 @@ func NewLogeDB(store LogeStore) *LogeDB {
 		store: store,
 		cache: make(objCache),
 		lastSnapshotID: 1,
+		linkTypeSpec: spack.MakeTypeSpec([]string{}),
 	}
 }
 
@@ -28,33 +33,7 @@ type typeMap map[string]*logeType
 
 type objCache map[string]*logeObject
 
-type objRef struct {
-	TypeName string
-	Key LogeKey
-	LinkName string
-	CacheKey string
-}
-
 type Transactor func(*Transaction)
-
-
-func makeObjRef(typeName string, key LogeKey) objRef {
-	var cacheKey = typeName + "^" + string(key)
-	return objRef { typeName, key, "", cacheKey }
-}
-
-func makeLinkRef(typeName string, linkName string, key LogeKey) objRef {
-	var cacheKey = "^" + typeName + "^" + linkName + "^" + string(key)
-	return objRef { typeName, key, linkName, cacheKey }
-}
-
-func (objRef objRef) String() string {
-	return objRef.CacheKey
-}
-
-func (objRef objRef) IsLink() bool {
-	return objRef.LinkName != ""
-}
 
 
 func (db *LogeDB) Close() {
@@ -68,26 +47,15 @@ func (db *LogeDB) CreateType(name string, version uint16, exemplar interface{}, 
 		panic(fmt.Sprintf("Type exists: '%s'", name))
 	}
 
-	var infos = make(map[string]*linkInfo)
-	for k, v := range linkSpec {
-		infos[k] = &linkInfo{
-			Name: k,
-			Target: v,
-			Tag: 0,
-		}
-	}
+	var vt = db.store.getSpackType(name)
+	var spackExemplar = reflect.ValueOf(exemplar).Elem().Interface()
+	vt.AddVersion(version, spackExemplar, nil)
+	var typ = NewType(name, version, exemplar, linkSpec, vt)
 
-	var t = &logeType {
-		Name: name,
-		Version: version,
-		Exemplar: exemplar,
-		Links: infos,
-	}
-
-	db.types[name] = t
-	db.store.registerType(t)
+	db.types[name] = typ
+	db.store.registerType(typ)
 	
-	return t
+	return typ
 }
 
 
@@ -115,12 +83,12 @@ func (db *LogeDB) Transact(actor Transactor, timeout time.Duration) bool {
 	return false
 }
 
-func (db *LogeDB) Find(typeName string, linkName string, target LogeKey) ResultSet {	
-	return db.store.find(db.types[typeName], linkName, target)
+func (db *LogeDB) Find(typeName string, linkName string, target LogeKey) ResultSet {
+	return db.store.find(makeLinkRef(typeName, linkName, ""), target)
 }
 
 func (db *LogeDB) FindFrom(typeName string, linkName string, target LogeKey, from LogeKey, limit int) ResultSet {	
-	return db.store.findFrom(db.types[typeName], linkName, target, from, limit)
+	return db.store.findSlice(makeLinkRef(typeName, linkName, ""), target, from, limit)
 }
 
 
@@ -142,21 +110,20 @@ func (db *LogeDB) FlushCache() int {
 // -----------------------------------------------
 
 func (db *LogeDB) ExistsOne(typeName string, key LogeKey) bool {
-	var obj = db.store.get(db.types[typeName], key)
+	var obj = db.store.get(makeObjRef(typeName, key))
 	return obj != nil
 }
 
 func (db *LogeDB) ReadOne(typeName string, key LogeKey) interface{} {
 	var typ = db.types[typeName]
-	var obj = db.store.get(typ, key)
-	if obj == nil {
-		return typ.NilValue()
-	}
-	return obj
+	return typ.Decode(db.store.get(makeObjRef(typeName, key)))
 }
 
 func (db *LogeDB) ReadLinksOne(typeName string, linkName string, key LogeKey) []string {
-	return db.store.getLinks(db.types[typeName], linkName, key)
+	var blob = db.store.get(makeLinkRef(typeName, linkName, key))
+	var links linkList
+	spack.DecodeFromBytes(&links, db.linkTypeSpec, blob)
+	return links
 }
 
 func (db *LogeDB) SetOne(typeName string, key LogeKey, obj interface{}) {
@@ -202,38 +169,21 @@ func (db *LogeDB) ensureObj(ref objRef, load bool) *logeObject {
 	db.lock.Unlock()
 
 	var version *objectVersion
-	if ref.IsLink() { 
-		var links []string
-		if load {
-			links = db.store.getLinks(typ, ref.LinkName, key)
-			obj.Loaded = true
-		}
 
-		var linkSet = newLinkSet()
-		linkSet.Original = links
-		version = &objectVersion {
-			LogeObj: obj,
-			Object: linkSet,
-		}
+	var blob []byte
+	if load {
+		blob = db.store.get(ref)
+		obj.Loaded = true
+	}
+
+	version = &objectVersion {
+		LogeObj: obj,
+		Blob: blob,
+	}
+
+	if ref.IsLink() { 
 		obj.LinkName = ref.LinkName
 
-	} else {
-		var object interface{}
-		
-		if load {
-			object = db.store.get(typ, key)
-			obj.Loaded = true
-		}
-
-		if object == nil {
-			object = typ.NilValue()
-		}
-
-		version = &objectVersion{
-			Object: object,
-		}
-
-		version.LogeObj = obj
 	}
 
 	obj.Current = version

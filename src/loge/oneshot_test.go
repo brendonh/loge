@@ -53,7 +53,7 @@ func TestOneshotOps(test *testing.T) {
 	}
 
 	var wibLinks = db.ReadLinksOne("test", "other", "wib")
-	if !reflect.DeepEqual(wibLinks, []string{}) {
-		test.Errorf("Wrong one-shot links: %v", wibLinks)
+	if len(wibLinks) != 0 {
+		test.Errorf("Wrong one-shot links: %#v", wibLinks)
 	}
 }

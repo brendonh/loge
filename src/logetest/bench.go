@@ -16,10 +16,10 @@ func WriteBench() {
 	runtime.GOMAXPROCS(cores)
 
 	DoWrite(cores, 0)
-	DoWrite(cores, 1)
-	DoWrite(cores, 2)
-	DoWrite(cores, 3)
-	DoWrite(cores, 4)
+	// DoWrite(cores, 1)
+	// DoWrite(cores, 2)
+	// DoWrite(cores, 3)
+	// DoWrite(cores, 4)
 
 }
 

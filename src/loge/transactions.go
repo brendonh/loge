@@ -17,10 +17,17 @@ const (
 )
 
 
+type liveVersion struct {
+	version *objectVersion
+	object interface{}
+	dirty bool
+}
+
+
 type Transaction struct {
 	db *LogeDB
 	context transactionContext
-	versions map[string]*objectVersion
+	versions map[string]*liveVersion
 	state TransactionState
 	snapshotID uint64
 }
@@ -29,7 +36,7 @@ func NewTransaction(db *LogeDB, sID uint64) *Transaction {
 	return &Transaction{
 		db: db,
 		context: db.store.newContext(),
-		versions: make(map[string]*objectVersion),
+		versions: make(map[string]*liveVersion),
 		state: ACTIVE,
 		snapshotID: sID,
 	}
@@ -45,30 +52,30 @@ func (t *Transaction) GetState() TransactionState {
 }
 
 func (t *Transaction) Exists(typeName string, key LogeKey) bool {
-	var version = t.getObj(makeObjRef(typeName, key), false, true)
-	return version.hasValue()
+	var lv = t.getVersion(makeObjRef(typeName, key), false, true)
+	return lv.version.LogeObj.hasValue(lv.object)
 }
 
 
 func (t *Transaction) Read(typeName string, key LogeKey) interface{} {
-	return t.getObj(makeObjRef(typeName, key), false, true).Object
+	return t.getVersion(makeObjRef(typeName, key), false, true).object
 }
 
 
 func (t *Transaction) Write(typeName string, key LogeKey) interface{} {
-	return t.getObj(makeObjRef(typeName, key), true, true).Object
+	return t.getVersion(makeObjRef(typeName, key), true, true).object
 }
 
 
 func (t *Transaction) Set(typeName string, key LogeKey, obj interface{}) {
-	var version = t.getObj(makeObjRef(typeName, key), true, false)
-	version.Object = obj
+	var version = t.getVersion(makeObjRef(typeName, key), true, false)
+	version.object = obj
 }
 
 
 func (t *Transaction) Delete(typeName string, key LogeKey) {
-	var version = t.getObj(makeObjRef(typeName, key), true, true)
-	version.Object = version.LogeObj.Type.NilValue()
+	var version = t.getVersion(makeObjRef(typeName, key), true, true)
+	version.object = version.version.LogeObj.Type.NilValue()
 }
 
 
@@ -98,11 +105,11 @@ func (t *Transaction) SetLinks(typeName string, linkName string, key LogeKey, ta
 }
 
 func (t *Transaction) Find(typeName string, linkName string, target LogeKey) ResultSet {
-	return t.context.find(t.db.types[typeName], linkName, target)
+	return t.context.find(makeLinkRef(typeName, linkName, ""), target)
 }
 
-func (t *Transaction) FindFrom(typeName string, linkName string, target LogeKey, from LogeKey, limit int) ResultSet {	
-	return t.context.findFrom(t.db.types[typeName], linkName, target, from, limit)
+func (t *Transaction) FindSlice(typeName string, linkName string, target LogeKey, from LogeKey, limit int) ResultSet {	
+	return t.context.findSlice(makeLinkRef(typeName, linkName, ""), target, from, limit)
 }
 
 // -----------------------------------------------
@@ -110,28 +117,25 @@ func (t *Transaction) FindFrom(typeName string, linkName string, target LogeKey,
 // -----------------------------------------------
 
 func (t *Transaction) getLink(ref objRef, forWrite bool, load bool) *linkSet {
-	var version = t.getObj(ref, forWrite, load)
-	return version.Object.(*linkSet)
+	var version = t.getVersion(ref, forWrite, load)
+	return version.object.(*linkSet)
 }
 
-func (t *Transaction) getObj(ref objRef, forWrite bool, load bool) *objectVersion {
+func (t *Transaction) getVersion(ref objRef, forWrite bool, load bool) *liveVersion {
 
 	if t.state != ACTIVE {
 		panic(fmt.Sprintf("GetObj from inactive transaction %s\n", t))
 	}
 
-	var objKey = ref.String()
+	var objKey = ref.CacheKey
 
-	version, ok := t.versions[objKey]
+	lv, ok := t.versions[objKey]
 
 	if ok {
 		if forWrite {
-			if !version.Dirty {
-				version = version.LogeObj.newVersion(t.snapshotID)
-				t.versions[objKey] = version
-			}
+			lv.dirty = true
 		}
-		return version
+		return lv
 	}
 
 	var logeObj = t.db.ensureObj(ref, load)
@@ -141,15 +145,19 @@ func (t *Transaction) getObj(ref objRef, forWrite bool, load bool) *objectVersio
 
 	logeObj.RefCount++
 
-	if forWrite {
-		version = logeObj.newVersion(t.snapshotID)
-	} else {
-		version = logeObj.getTransactionVersion(t.snapshotID)
+	var version *objectVersion
+	version = logeObj.getVersion(t.snapshotID)
+
+	var object = logeObj.decode(version.Blob)
+
+	lv = &liveVersion{
+		version: version,
+		object: object,
+		dirty: forWrite,
 	}
 
-	t.versions[objKey] = version
-
-	return version
+	t.versions[objKey] = lv
+	return lv
 }
 
 
@@ -177,8 +185,8 @@ func (t *Transaction) Commit() bool {
 }
 
 func (t *Transaction) tryCommit() bool {
-	for _, version := range t.versions {
-		var obj = version.LogeObj
+	for _, lv := range t.versions {
+		var obj = lv.version.LogeObj
 
 		if !obj.Lock.TryLock() {
 			return false
@@ -194,11 +202,12 @@ func (t *Transaction) tryCommit() bool {
 	var context = t.context
 	var sID = t.db.newSnapshotID()
 
-	for _, version := range t.versions {
-		if version.Dirty {
-			version.LogeObj.applyVersion(version, context, sID)
+	for _, lv := range t.versions {
+		if lv.dirty {
+			var obj = lv.version.LogeObj
+			obj.applyVersion(lv.object, context, sID)
 		}
-		version.LogeObj.RefCount--
+		lv.version.LogeObj.RefCount--
 	}
 
 	var err = context.commit()

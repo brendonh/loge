@@ -3,7 +3,6 @@ package loge
 import (
 	"fmt"
 	"bytes"
-	"reflect"
 	"encoding/binary"
 	"runtime"
 
@@ -16,11 +15,8 @@ const ldb_LINK_INFO_TAG uint16 = 3
 const ldb_INDEX_TAG uint16 = 4
 const ldb_START_TAG uint16 = 8
 
-var linkSpec *spack.TypeSpec = spack.MakeTypeSpec([]string{})
-var linkInfoSpec *spack.TypeSpec = spack.MakeTypeSpec(linkInfo{})
-
 type levelDBWriter interface {
-	GetType(string) *spack.VersionedType
+	GetLogeType(string) *logeType
 	Put([]byte, []byte) error
 	Delete([]byte) error
 }
@@ -29,6 +25,7 @@ type levelDBStore struct {
 	basePath string
 	db *levigo.DB
 	types *spack.TypeSet
+	logeTypes map[string]*logeType
 
 	writeQueue chan *levelDBContext
 	flushed bool
@@ -75,6 +72,7 @@ func NewLevelDBStore(basePath string) LogeStore {
 		basePath: basePath,
 		db: db,
 		types: spack.NewTypeSet(),
+		logeTypes: make(map[string]*logeType),
 		
 		writeQueue: make(chan *levelDBContext),
 		flushed: false,
@@ -96,10 +94,10 @@ func (store *levelDBStore) close() {
 }
 
 func (store *levelDBStore) registerType(typ *logeType) {
-	var vt = store.types.RegisterType(typ.Name)
-	var exemplar = reflect.ValueOf(typ.Exemplar).Elem().Interface()
-	vt.AddVersion(typ.Version, exemplar, nil)
-	store.tagVersions(vt, typ)
+	store.logeTypes[typ.Name] = typ
+	store.tagVersions(typ)
+
+	var vt = typ.SpackType
 
 	if (!vt.Dirty) {
 		return
@@ -124,8 +122,12 @@ func (store *levelDBStore) registerType(typ *logeType) {
 	vt.Dirty = false
 }
 
-func (store *levelDBStore) GetType(typeName string) *spack.VersionedType {
-	return store.types.Type(typeName)
+func (store *levelDBStore) getSpackType(name string) *spack.VersionedType {
+	return store.types.RegisterType(name)
+}
+
+func (store *levelDBStore) GetLogeType(typeName string) *logeType {
+	return store.logeTypes[typeName]
 }
 
 func (store *levelDBStore) Put(key []byte, val []byte) error {
@@ -137,38 +139,17 @@ func (store *levelDBStore) Delete(key []byte) error {
 }
 
 
-func (store *levelDBStore) get(typ *logeType, key LogeKey) interface{} {
-	var vt = store.types.Type(typ.Name)
-	var encKey = vt.EncodeKey(string(key))
+func (store *levelDBStore) get(ref objRef) []byte {
+	var typ = store.logeTypes[ref.TypeName]
+	var vt = typ.SpackType
 
-	val, err := store.db.Get(defaultReadOptions, encKey)
-
-	if err != nil {
-		panic(fmt.Sprintf("Read error: %v\n", err))
-	}
-
-	var obj interface{}
-	if val == nil {
-		obj = typ.NilValue()
+	var key []byte
+	if ref.LinkName == "" {
+		key = vt.EncodeKey(string(ref.Key))
 	} else {
-		obj, err = vt.DecodeObj(val)
-		if err != nil {
-			panic(fmt.Sprintf("Decode error: %v", err))
-		}
+		var linkInfo = typ.Links[ref.LinkName]
+		key = encodeTaggedKey([]uint16{ldb_LINK_TAG, vt.Tag, linkInfo.Tag}, string(ref.Key))
 	}
-
-	return obj
-}
-
-func (store *levelDBStore) getLinks(typ *logeType, linkName string, objKey LogeKey) []string {
-	var vt = store.types.Type(typ.Name)
-
-	var linkInfo, ok = typ.Links[linkName]
-	if !ok {
-		panic(fmt.Sprintf("Link info missing for %s", linkName))
-	}
-
-	var key = encodeTaggedKey([]uint16{ldb_LINK_TAG, vt.Tag, linkInfo.Tag}, string(objKey))
 
 	val, err := store.db.Get(defaultReadOptions, key)
 
@@ -176,34 +157,31 @@ func (store *levelDBStore) getLinks(typ *logeType, linkName string, objKey LogeK
 		panic(fmt.Sprintf("Read error: %v\n", err))
 	}
 
-	if val == nil {
-		return linkList{}
-	}
-
-	var links linkList
-	spack.DecodeFromBytes(&links, linkSpec, val)
-
-	return links
+	return val
 }
 
-func (store *levelDBStore) store(obj *logeObject) error {
-	return ldb_store(store, obj)
+func (store *levelDBStore) store(ref objRef, enc []byte) error {
+	return ldb_store(store, ref, enc)
 }
 
-func (store *levelDBStore) storeLinks(obj *logeObject) error {
-	return ldb_storeLinks(store, obj)
+func (store *levelDBStore) addIndex(ref objRef, target LogeKey) {
+	ldb_addIndex(store, ref, target)
+}
+
+func (store *levelDBStore) remIndex(ref objRef, target LogeKey) {
+	ldb_remIndex(store, ref, target)
 }
 
 // -----------------------------------------------
 // Search
 // -----------------------------------------------
 
-func (store *levelDBStore) find(typ *logeType, linkName string, key LogeKey) ResultSet {
-	return ldb_find(store, defaultReadOptions, typ, linkName, key, "", -1)
+func (store *levelDBStore) find(ref objRef, key LogeKey) ResultSet {
+	return ldb_find(store, defaultReadOptions, ref, key, "", -1)
 }
 
-func (store *levelDBStore) findFrom(typ *logeType, linkName string, key LogeKey, from LogeKey, limit int) ResultSet {
-	return ldb_find(store, defaultReadOptions, typ, linkName, key, from, limit)
+func (store *levelDBStore) findSlice(ref objRef, key LogeKey, from LogeKey, limit int) ResultSet {
+	return ldb_find(store, defaultReadOptions, ref, key, from, limit)
 }
 
 func (rs *levelDBResultSet) Valid() bool {
@@ -274,8 +252,8 @@ func (store *levelDBStore) writer() {
 }
 
 
-func (context *levelDBContext) GetType(typeName string) *spack.VersionedType {
-	return context.ldbStore.types.Type(typeName)
+func (context *levelDBContext) GetLogeType(typeName string) *logeType {
+	return context.ldbStore.logeTypes[typeName]
 }
 
 func (context *levelDBContext) Put(key []byte, val []byte) error {
@@ -318,28 +296,28 @@ func (context *levelDBContext) Write() error {
 	return context.ldbStore.db.Write(defaultWriteOptions, wb)
 }
 
-func (context *levelDBContext) store(obj *logeObject) error {
-	return ldb_store(context, obj)
+func (context *levelDBContext) store(ref objRef, enc []byte) error {
+	return ldb_store(context, ref, enc)
 }
 
-func (context *levelDBContext) storeLinks(obj *logeObject) error {
-	return ldb_storeLinks(context, obj)
+func (context *levelDBContext) addIndex(ref objRef, target LogeKey) {
+	ldb_addIndex(context, ref, target)
 }
 
-func (context *levelDBContext) find(typ *logeType, linkName string, target LogeKey) ResultSet {
-	return ldb_find(context.ldbStore, context.readOptions, typ, linkName, target, "", -1)
+func (context *levelDBContext) remIndex(ref objRef, target LogeKey) {
+	ldb_remIndex(context, ref, target)
 }
 
-func (context *levelDBContext) findFrom(typ *logeType, linkName string, key LogeKey, from LogeKey, limit int) ResultSet {
-	return ldb_find(context.ldbStore, context.readOptions, typ, linkName, key, from, limit)
+func (context *levelDBContext) find(ref objRef, target LogeKey) ResultSet {
+	return ldb_find(context.ldbStore, context.readOptions, ref, target, "", -1)
 }
 
-func (context *levelDBContext) get(typ *logeType, key LogeKey) interface{} {
-	return context.ldbStore.get(typ, key)
+func (context *levelDBContext) findSlice(ref objRef, key LogeKey, from LogeKey, limit int) ResultSet {
+	return ldb_find(context.ldbStore, context.readOptions, ref, key, from, limit)
 }
 
-func (context *levelDBContext) getLinks(typ *logeType, linkName string, key LogeKey) []string {
-	return context.ldbStore.getLinks(typ, linkName, key)
+func (context *levelDBContext) get(ref objRef) []byte {
+	return context.ldbStore.get(ref)
 }
 
 // -----------------------------------------------
@@ -363,7 +341,8 @@ func (store *levelDBStore) loadTypeMetadata() {
 	}
 }
 
-func (store *levelDBStore) tagVersions(vt *spack.VersionedType, typ *logeType) {
+func (store *levelDBStore) tagVersions(typ *logeType) {
+	var vt = typ.SpackType
 	var prefix = encodeTaggedKey([]uint16{ldb_LINK_INFO_TAG, vt.Tag}, "")
 	var it = store.iteratePrefix(prefix, []byte{}, defaultReadOptions)
 	defer it.Close()
@@ -414,13 +393,23 @@ func encodeTaggedKey(tags []uint16, key string) []byte {
 	return buf.Bytes()
 }
 
-func encodeIndexKey(prefix []byte, target string, source string) []byte {
-	var buf = make([]byte, 0, len(prefix) + len(target) + len(source))
-	buf = append(buf, prefix...)
-	buf = append(buf, []byte(target)...)
-	buf = append(buf, 0)
-	buf = append(buf, []byte(source)...)
-	return buf
+func encodeIndexKey(writer levelDBWriter, ref objRef, target LogeKey) []byte {
+	var typ = writer.GetLogeType(ref.TypeName)
+	var vt = typ.SpackType
+	var linkInfo = typ.Links[ref.LinkName]
+	
+	var tags = []uint16{ldb_INDEX_TAG, vt.Tag, linkInfo.Tag}
+
+	var source = ref.Key
+
+	var buf = bytes.NewBuffer(make([]byte, 0, (2 * len(tags)) + len(target) + len(source)))
+	for _, tag := range tags {
+		binary.Write(buf, binary.BigEndian, tag)
+	}
+	buf.Write([]byte(target))
+	buf.Write([]byte{0})
+	buf.Write([]byte(source))
+	return buf.Bytes()
 }
 
 
@@ -428,8 +417,41 @@ func encodeIndexKey(prefix []byte, target string, source string) []byte {
 // Levigo interaction
 // -----------------------------------------------
 
+
+func ldb_store(writer levelDBWriter, ref objRef, enc []byte) error {
+	var typ = writer.GetLogeType(ref.TypeName)
+	var vt = typ.SpackType
+
+	var key []byte
+	if ref.LinkName == "" {
+		key = vt.EncodeKey(string(ref.Key))
+	} else {
+		var linkInfo = typ.Links[ref.LinkName]
+		key = encodeTaggedKey([]uint16{ldb_LINK_TAG, vt.Tag, linkInfo.Tag}, string(ref.Key))
+	}
+
+	if len(enc) == 0 {
+		writer.Delete(key)
+		return nil
+	}
+	
+	writer.Put(key, enc)
+
+	return nil
+}
+
+func ldb_addIndex(writer levelDBWriter, ref objRef, target LogeKey) {
+	var key = encodeIndexKey(writer, ref, target)
+	writer.Put(key, []byte{})
+}
+
+func ldb_remIndex(writer levelDBWriter, ref objRef, target LogeKey) {
+	var key = encodeIndexKey(writer, ref, target)
+	writer.Delete(key)
+}
+
 func ldb_find(store *levelDBStore, readOptions *levigo.ReadOptions,
-	typ *logeType, linkName string, target LogeKey, from LogeKey, limit int) ResultSet {
+	ref objRef, target LogeKey, from LogeKey, limit int) ResultSet {
 
 	if limit == 0 {
 		return &levelDBResultSet {
@@ -437,8 +459,8 @@ func ldb_find(store *levelDBStore, readOptions *levigo.ReadOptions,
 		}
 	}
 
-	var vt = store.types.Type(typ.Name)
-	var linkInfo = typ.Links[linkName]
+	var vt = store.types.Type(ref.TypeName)
+	var linkInfo = store.logeTypes[ref.TypeName].Links[ref.LinkName]
 
 	var prefix = append(
 		encodeTaggedKey([]uint16{ldb_INDEX_TAG, vt.Tag, linkInfo.Tag}, string(target)),
@@ -463,58 +485,6 @@ func ldb_find(store *levelDBStore, readOptions *levigo.ReadOptions,
 		limit: limit,
 		count: 0,
 	}
-}
-
-func ldb_store(writer levelDBWriter, obj *logeObject) error {
-	var vt = writer.GetType(obj.Type.Name)
-	var key = vt.EncodeKey(string(obj.Key))
-
-	if !obj.Current.hasValue() {
-		writer.Delete(key)
-		return nil
-	}
-
-	var val, err = vt.EncodeObj(obj.Current.Object)
-
-	if err != nil {
-		panic(fmt.Sprintf("Encoding error: %v\n", err))
-	}
-	
-	writer.Put(key, val)
-
-	return nil
-}
-
-func ldb_storeLinks(writer levelDBWriter, linkObj *logeObject) error {
-	var set = linkObj.Current.Object.(*linkSet)
-
-	if len(set.Added) == 0 && len(set.Removed) == 0 {
-		return nil
-	}
-
-	var vt = writer.GetType(linkObj.Type.Name)
-	var linkInfo = linkObj.Type.Links[linkObj.LinkName]
-
-	var key = encodeTaggedKey([]uint16{ldb_LINK_TAG, vt.Tag, linkInfo.Tag}, string(linkObj.Key))
-	val, _ := spack.EncodeToBytes(set.ReadKeys(), linkSpec)
-
-	writer.Put(key, val)
-
-	var prefix = encodeTaggedKey([]uint16{ldb_INDEX_TAG, vt.Tag, linkInfo.Tag}, "")
-	var source = string(linkObj.Key)
-
-	for _, target := range set.Removed {
-		var key = encodeIndexKey(prefix, target, source)
-		writer.Delete(key)
-	}
-
-	for _, target := range set.Added {
-		var key = encodeIndexKey(prefix, target, source)
-		writer.Put(key, []byte{})
-	}
-
-
-	return nil
 }
 
 // -----------------------------------------------

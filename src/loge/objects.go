@@ -1,7 +1,10 @@
 package loge
 
 import (
+	"fmt"
 	"reflect"
+
+	"github.com/brendonh/spack"
 )
 
 type logeObject struct {
@@ -17,8 +20,7 @@ type logeObject struct {
 
 type objectVersion struct {
 	LogeObj *logeObject
-	Object interface{}
-	Dirty bool
+	Blob []byte
 	snapshotID uint64
 	Previous *objectVersion
 }
@@ -35,7 +37,14 @@ func initializeObject(db *LogeDB, t *logeType, key LogeKey) *logeObject {
 	}
 }
 
-func (obj *logeObject) getTransactionVersion(sID uint64) *objectVersion {
+func (obj *logeObject) makeObjRef() objRef {
+	if obj.LinkName != "" {
+		return makeLinkRef(obj.Type.Name, obj.LinkName, obj.Key)
+	}
+	return makeObjRef(obj.Type.Name, obj.Key)
+}
+
+func (obj *logeObject) getVersion(sID uint64) *objectVersion {
 	var version = obj.Current
 	for version.snapshotID > sID {
 		version = version.Previous
@@ -46,39 +55,61 @@ func (obj *logeObject) getTransactionVersion(sID uint64) *objectVersion {
 	return version
 }
 
-func (obj *logeObject) newVersion(sID uint64) *objectVersion {
-	var current = obj.getTransactionVersion(sID)
+func (obj *logeObject) applyVersion(object interface{}, context storeContext, sID uint64) {
+	var blob = obj.encode(object)
 
-	var newObj = obj.Type.Copy(current.Object)
-
-	return &objectVersion{
+	obj.Current = &objectVersion{
 		LogeObj: obj,
-		Object: newObj,
-		Dirty: true,
+		Blob: blob,
 		Previous: obj.Current,
-		snapshotID: current.snapshotID,
+		snapshotID: sID,
 	}
-}
-
-func (obj *logeObject) applyVersion(version *objectVersion, context storeContext, sID uint64) {
-	version.snapshotID = sID
-	obj.Current = version
 	obj.Loaded = true
 
-	if obj.LinkName == "" {
-		context.store(obj)
-	} else {
-		context.storeLinks(obj)
-	}
+	var ref = obj.makeObjRef()
+	context.store(ref, blob)
 
-	version.Dirty = false
 	if obj.LinkName != "" {
-		version.Object.(*linkSet).Freeze()
+		var links = object.(*linkSet)
+		for _, target := range links.Removed {
+			context.remIndex(ref, LogeKey(target))
+		}
+		for _, target := range links.Added {
+			context.addIndex(ref, LogeKey(target))
+		}
 	}
 }
 
-func (version *objectVersion) hasValue() bool {
-	var value = reflect.ValueOf(version.Object)
-	return !value.IsNil()
+func (obj *logeObject) decode(blob []byte) interface{} {
+	var object interface{}
+	if obj.LinkName == "" {
+		object = obj.Type.Decode(blob)
+	} else {
+		var links linkList
+		spack.DecodeFromBytes(&links, obj.DB.linkTypeSpec, blob)
+		object = &linkSet{ Original: links }
+	}
+	return object
+}
+
+func (obj *logeObject) encode(object interface{}) []byte {
+	if !obj.hasValue(object) {
+		return nil
+	}
+
+	if obj.LinkName == "" {
+		return obj.Type.Encode(object)
+	}
+
+	var set = object.(*linkSet)
+	enc, err := spack.EncodeToBytes(set.ReadKeys(), obj.DB.linkTypeSpec)
+	if err != nil {
+		panic(fmt.Sprintf("Link encode error: %v\n", err))
+	}
+	return enc
+}
+
+func (obj *logeObject) hasValue(object interface{}) bool {
+	return !reflect.ValueOf(object).IsNil()
 }
 
