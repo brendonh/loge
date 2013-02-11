@@ -44,15 +44,15 @@ func LinkSandbox() {
 		fmt.Printf("Ruby links: %v\n", t.ReadLinks("pet", "owner", "Ruby"))
 	}, 0)
 
-	for pet := range db.Find("pet", "owner", "Brendon") {
+	for _, pet := range db.Find("pet", "owner", "Brendon") {
 		fmt.Printf("Found Brendon pet: %s\n", pet)
 	}
 	
-	for pet := range db.Find("pet", "owner", "Mike") {
+	for _, pet := range db.Find("pet", "owner", "Mike") {
 		fmt.Printf("Found Mike pet: %s\n", pet)
 	}
 	
-	for pet := range db.Find("pet", "owner", "Nai") {
+	for _, pet := range db.Find("pet", "owner", "Nai") {
 		fmt.Printf("Found Nai pet: %s\n", pet)
 	}
 

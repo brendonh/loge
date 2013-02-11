@@ -144,16 +144,6 @@ func (t *Transaction) getVersion(ref objRef, forWrite bool, load bool) *liveVers
 
 	object, upgraded := version.getObject()
 
-	// logeObj.Lock.SpinLock()
-	// defer logeObj.Lock.Unlock()
-
-	// logeObj.RefCount++
-
-	// var version *objectVersion
-	// version = logeObj.getVersion(t.snapshotID)
-
-	//object, upgraded := logeObj.decode(version.Blob)
-
 	lv = &liveVersion{
 		version: version,
 		object: object,
@@ -185,10 +175,15 @@ func (t *Transaction) Commit() bool {
 	}
 
 	t.state = COMMITTING
+
+	var versions = make([]*liveVersion, 0, len(t.versions))
+	for _, v := range t.versions {
+		versions = append(versions, v)
+	}
 	
 	var delayFact = 10.0
 	for {
-		if t.tryCommit() {
+		if t.tryCommit(versions) {
 			break
 		}
 		var delay = time.Duration(delayFact - float64(rand.Intn(10)))
@@ -196,11 +191,13 @@ func (t *Transaction) Commit() bool {
 		delayFact *= t_BACKOFF_EXPONENT
 	}
 
+	t.db.releaseVersions(versions)
+
 	return t.state == FINISHED
 }
 
-func (t *Transaction) tryCommit() bool {
-	for _, lv := range t.versions {
+func (t *Transaction) tryCommit(versions []*liveVersion) bool {
+	for _, lv := range versions {
 		var obj = lv.version.LogeObj
 
 		if !obj.Lock.TryLock() {
@@ -217,12 +214,11 @@ func (t *Transaction) tryCommit() bool {
 	var context = t.context
 	var sID = t.db.newSnapshotID()
 
-	for _, lv := range t.versions {
+	for _, lv := range versions {
 		if lv.dirty {
 			var obj = lv.version.LogeObj
 			obj.applyVersion(lv.object, context, sID)
 		}
-		lv.version.LogeObj.RefCount--
 	}
 
 	var err = context.commit(sID)

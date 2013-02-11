@@ -9,8 +9,6 @@ import (
 )
 
 
-
-
 type LogeDB struct {
 	types typeMap
 	store LogeStore
@@ -87,19 +85,6 @@ func (db *LogeDB) Transact(actor Transactor, timeout time.Duration) bool {
 		}
 	}
 	return false
-}
-
-func (db *LogeDB) FlushCache() int {
-	var count = 0
-	db.lock.SpinLock()
-	defer db.lock.Unlock()
-	for key, obj := range db.cache {
-		if obj.RefCount == 0 {
-			delete(db.cache, key)
-			count++
-		}
-	}
-	return count
 }
 
 // -----------------------------------------------
@@ -201,4 +186,17 @@ func (db *LogeDB) acquireVersion(ref objRef, context transactionContext, load bo
 	return version
 }
 
+
+func (db *LogeDB) releaseVersions(versions []*liveVersion) {
+	db.lock.SpinLock()
+	defer db.lock.Unlock()
+
+	for _, lv := range versions {
+		var obj = lv.version.LogeObj
+		obj.RefCount--
+		if obj.RefCount == 0 {
+			delete(db.cache, obj.makeObjRef().CacheKey)
+		}
+	}
+}
 

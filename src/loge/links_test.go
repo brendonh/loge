@@ -73,8 +73,6 @@ func TestLinkStorage(test *testing.T) {
 		}
 	}, 0)
 
-	db.FlushCache()
-
 	db.Transact(func (t *Transaction) {
 		var links = t.ReadLinks("test", "sibling", "one")
 		if len(links) != 1 || links[0] != "two" {

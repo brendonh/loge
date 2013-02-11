@@ -61,7 +61,7 @@ func (obj *logeObject) ensureVersion(sID uint64) *objectVersion {
 		current = current.Previous
 	}
 
-	if current.snapshotID == sID {
+	if current != nil && current.snapshotID == sID {
 		return current
 	}
 

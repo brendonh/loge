@@ -51,8 +51,6 @@ func TestReadScoping(test *testing.T) {
 
 	trans1.Commit()
 
-	db.FlushCache()
-
 	if trans2.Read("test", "one").(*TestObj) != nil {
 		test.Errorf("Version visible in transaction created before obj create")
 	}

@@ -50,10 +50,7 @@ func (mvh memVersionHistory) findPrevious(sID uint64) []byte {
 	return nil
 }
 
-
-
 type objectMap map[string]memVersionHistory
-
 
 type memStore struct {
 	objects objectMap
