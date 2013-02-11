@@ -15,10 +15,6 @@ const ldb_LINK_INFO_TAG uint16 = 3
 const ldb_INDEX_TAG uint16 = 4
 const ldb_START_TAG uint16 = 8
 
-type levelDBWriter interface {
-	Put([]byte, []byte) error
-	Delete([]byte) error
-}
 
 type levelDBStore struct {
 	basePath string
@@ -98,7 +94,7 @@ func (store *levelDBStore) registerType(typ *logeType) {
 		return
 	}
 
-	fmt.Printf("Updating type info: %s\n", typ.Name)
+	fmt.Printf("Updating type info: %s (%d)\n", typ.Name, typ.Version)
 
 	var typeType = store.types.Type("_type")
 	var keyVal = typeType.EncodeKey(vt.Name)
@@ -121,14 +117,6 @@ func (store *levelDBStore) getSpackType(name string) *spack.VersionedType {
 	return store.types.RegisterType(name)
 }
 
-func (store *levelDBStore) Put(key []byte, val []byte) error {
-	return store.db.Put(defaultWriteOptions, key, val)
-}
-
-func (store *levelDBStore) Delete(key []byte) error {
-	return store.db.Delete(defaultWriteOptions, key)
-}
-
 
 func (store *levelDBStore) get(ref objRef) []byte {
 	val, err := store.db.Get(defaultReadOptions, []byte(ref.CacheKey))
@@ -140,29 +128,9 @@ func (store *levelDBStore) get(ref objRef) []byte {
 	return val
 }
 
-func (store *levelDBStore) store(ref objRef, enc []byte) error {
-	return ldb_store(store, ref, enc)
-}
-
-func (store *levelDBStore) addIndex(ref objRef, source LogeKey) {
-	ldb_addIndex(store, ref, source)
-}
-
-func (store *levelDBStore) remIndex(ref objRef, source LogeKey) {
-	ldb_remIndex(store, ref, source)
-}
-
 // -----------------------------------------------
 // Search
 // -----------------------------------------------
-
-func (store *levelDBStore) find(ref objRef) ResultSet {
-	return ldb_find(store, defaultReadOptions, ref, "", -1)
-}
-
-func (store *levelDBStore) findSlice(ref objRef, from LogeKey, limit int) ResultSet {
-	return ldb_find(store, defaultReadOptions, ref, from, limit)
-}
 
 func (rs *levelDBResultSet) Valid() bool {
 	return !rs.closed
@@ -232,15 +200,6 @@ func (store *levelDBStore) writer() {
 }
 
 
-func (context *levelDBContext) Put(key []byte, val []byte) error {
-	context.batch = append(context.batch, levelDBWriteEntry{ key, val, false })
-	return nil
-}
-
-func (context *levelDBContext) Delete(key []byte) error {
-	context.batch = append(context.batch, levelDBWriteEntry{ key, nil, true })
-	return nil
-}
 
 func (context *levelDBContext) commit() error {
 	context.ldbStore.writeQueue <- context
@@ -272,28 +231,87 @@ func (context *levelDBContext) Write() error {
 	return context.ldbStore.db.Write(defaultWriteOptions, wb)
 }
 
-func (context *levelDBContext) store(ref objRef, enc []byte) error {
-	return ldb_store(context, ref, enc)
-}
 
-func (context *levelDBContext) addIndex(ref objRef, source LogeKey) {
-	ldb_addIndex(context, ref, source)
-}
-
-func (context *levelDBContext) remIndex(ref objRef, source LogeKey) {
-	ldb_remIndex(context, ref, source)
-}
-
-func (context *levelDBContext) find(ref objRef) ResultSet {
-	return ldb_find(context.ldbStore, context.readOptions, ref, "", -1)
-}
-
-func (context *levelDBContext) findSlice(ref objRef, from LogeKey, limit int) ResultSet {
-	return ldb_find(context.ldbStore, context.readOptions, ref, from, limit)
-}
+// -----------------------------------------------
+// transactionContext API
+// -----------------------------------------------
 
 func (context *levelDBContext) get(ref objRef) []byte {
 	return context.ldbStore.get(ref)
+}
+
+func (context *levelDBContext) store(ref objRef, enc []byte) error {
+	var key = []byte(ref.CacheKey)
+
+	if len(enc) == 0 {
+		context.delete(key)
+		return nil
+	}
+	
+	context.put(key, enc)
+
+	return nil
+}
+
+func (context *levelDBContext) addIndex(ref objRef, source LogeKey) {
+	var key = encodeIndexKey(ref, source)
+	context.put(key, []byte{})
+}
+
+func (context *levelDBContext) remIndex(ref objRef, source LogeKey) {
+	var key = encodeIndexKey(ref, source)
+	context.delete(key)
+}
+
+func (context *levelDBContext) find(ref objRef) ResultSet {
+	return context.findSlice(ref, "", -1)
+}
+
+func (context *levelDBContext) findSlice(ref objRef, from LogeKey, limit int) ResultSet {
+	if limit == 0 {
+		return &levelDBResultSet {
+			closed: true,
+		}
+	}
+
+	var prefix = append(
+		encodeLDBKey(ldb_INDEX_TAG, ref),
+		0)
+
+	var it = context.ldbStore.iteratePrefix(prefix, []byte(from), context.readOptions)
+	if !it.Valid() {
+		it.Close()
+		return &levelDBResultSet {
+			closed: true,
+		}
+	}
+
+	var prefixLen = len(prefix)
+	var next = string(it.Key()[prefixLen:])
+
+	return &levelDBResultSet{
+		it: it,
+		prefixLen: prefixLen,
+		next: next,
+		closed: false,
+		limit: limit,
+		count: 0,
+	}
+}
+
+
+// -----------------------------------------------
+// Helpers
+// -----------------------------------------------
+
+func (context *levelDBContext) put(key []byte, val []byte) error {
+	context.batch = append(context.batch, levelDBWriteEntry{ key, val, false })
+	return nil
+}
+
+func (context *levelDBContext) delete(key []byte) error {
+	context.batch = append(context.batch, levelDBWriteEntry{ key, nil, true })
+	return nil
 }
 
 // -----------------------------------------------
@@ -307,7 +325,7 @@ func (store *levelDBStore) loadTypeMetadata() {
 	defer it.Close()
 
 	for it = it; it.Valid(); it.Next() {
-		var typeInfo, err = typeType.DecodeObj(it.Value())
+		var typeInfo, _, err = typeType.DecodeObj(it.Value())
 
 		if err != nil {
 			panic(fmt.Sprintf("Error loading type info: %v", err))
@@ -377,7 +395,7 @@ func encodeTaggedKey(tags []uint16, key string) []byte {
 	return buf.Bytes()
 }
 
-func encodeIndexKey(writer levelDBWriter, ref objRef, target LogeKey) []byte {
+func encodeIndexKey(ref objRef, target LogeKey) []byte {
 	var targetBytes = []byte(ref.CacheKey)
 	var sourceBytes = []byte(target)
 	var buf = bytes.NewBuffer(make([]byte, 0, 3 + len(targetBytes) + len(sourceBytes)))
@@ -388,68 +406,6 @@ func encodeIndexKey(writer levelDBWriter, ref objRef, target LogeKey) []byte {
 	return buf.Bytes()
 }
 
-
-// -----------------------------------------------
-// Levigo interaction
-// -----------------------------------------------
-
-
-func ldb_store(writer levelDBWriter, ref objRef, enc []byte) error {
-	var key = []byte(ref.CacheKey)
-
-	if len(enc) == 0 {
-		writer.Delete(key)
-		return nil
-	}
-	
-	writer.Put(key, enc)
-
-	return nil
-}
-
-func ldb_addIndex(writer levelDBWriter, ref objRef, source LogeKey) {
-	var key = encodeIndexKey(writer, ref, source)
-	writer.Put(key, []byte{})
-}
-
-func ldb_remIndex(writer levelDBWriter, ref objRef, source LogeKey) {
-	var key = encodeIndexKey(writer, ref, source)
-	writer.Delete(key)
-}
-
-func ldb_find(store *levelDBStore, readOptions *levigo.ReadOptions,
-	ref objRef, from LogeKey, limit int) ResultSet {
-
-	if limit == 0 {
-		return &levelDBResultSet {
-			closed: true,
-		}
-	}
-
-	var prefix = append(
-		encodeLDBKey(ldb_INDEX_TAG, ref),
-		0)
-
-	var it = store.iteratePrefix(prefix, []byte(from), readOptions)
-	if !it.Valid() {
-		it.Close()
-		return &levelDBResultSet {
-			closed: true,
-		}
-	}
-
-	var prefixLen = len(prefix)
-	var next = string(it.Key()[prefixLen:])
-
-	return &levelDBResultSet{
-		it: it,
-		prefixLen: prefixLen,
-		next: next,
-		closed: false,
-		limit: limit,
-		count: 0,
-	}
-}
 
 // -----------------------------------------------
 // Prefix iterator

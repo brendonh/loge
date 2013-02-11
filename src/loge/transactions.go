@@ -10,6 +10,7 @@ type TransactionState int
 
 const (
 	ACTIVE = iota
+	CANCELLED
 	COMMITTING
 	FINISHED
 	ABORTED
@@ -30,6 +31,7 @@ type Transaction struct {
 	versions map[string]*liveVersion
 	state TransactionState
 	snapshotID uint64
+	cancelled bool
 }
 
 func NewTransaction(db *LogeDB, sID uint64) *Transaction {
@@ -148,12 +150,12 @@ func (t *Transaction) getVersion(ref objRef, forWrite bool, load bool) *liveVers
 	var version *objectVersion
 	version = logeObj.getVersion(t.snapshotID)
 
-	var object = logeObj.decode(version.Blob)
+	object, upgraded := logeObj.decode(version.Blob)
 
 	lv = &liveVersion{
 		version: version,
 		object: object,
-		dirty: forWrite,
+		dirty: forWrite || upgraded,
 	}
 
 	t.versions[objKey] = lv
@@ -163,8 +165,19 @@ func (t *Transaction) getVersion(ref objRef, forWrite bool, load bool) *liveVers
 
 const t_BACKOFF_EXPONENT = 1.05
 
+func (t *Transaction) Cancel() {
+	if (t.state != ACTIVE) {
+		panic(fmt.Sprintf("Cancel on transaction %s\n", t))
+	}
+
+	t.state = CANCELLED
+}
+
 func (t *Transaction) Commit() bool {
-	
+	if (t.state == CANCELLED) {
+		return false
+	}
+
 	if (t.state != ACTIVE) {
 		panic(fmt.Sprintf("Commit on transaction %s\n", t))
 	}
@@ -225,6 +238,8 @@ func (ts TransactionState) String() string {
 	switch ts {
 	case ACTIVE: 
 		return "ACTIVE"
+	case CANCELLED:
+		return "CANCELLED"
 	case COMMITTING: 
 		return "COMMITTING"
 	case FINISHED: 

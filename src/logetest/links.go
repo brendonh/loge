@@ -9,11 +9,11 @@ func LinkSandbox() {
 	var db = loge.NewLogeDB(loge.NewLevelDBStore("data/links"))
 	defer db.Close()
 
-	db.CreateType("person", 1, &Person{}, nil)
+	db.CreateType(loge.NewTypeDef("person", 1, &Person{}))
 
-	db.CreateType("pet", 1, &Pet{}, loge.LinkSpec{
-		"owner": "person",
-	})
+	var petDef = loge.NewTypeDef("pet", 1, &Pet{})
+	petDef.Links = loge.LinkSpec{ "owner": "person" }
+	db.CreateType(petDef)
 
 	db.Transact(func (t *loge.Transaction) {
 		t.Set("person", "Brendon", &Person{ "Brendon", 31, []uint16{} })
@@ -44,24 +44,15 @@ func LinkSandbox() {
 		fmt.Printf("Ruby links: %v\n", t.ReadLinks("pet", "owner", "Ruby"))
 	}, 0)
 
-	var pets = db.Find("pet", "owner", "Brendon")
-	
-	for pets.Valid() {
-		var pet = pets.Next()
+	for pet := range db.Find("pet", "owner", "Brendon") {
 		fmt.Printf("Found Brendon pet: %s\n", pet)
 	}
 	
-	pets = db.Find("pet", "owner", "Mike")
-	
-	for pets.Valid() {
-		var pet = pets.Next()
+	for pet := range db.Find("pet", "owner", "Mike") {
 		fmt.Printf("Found Mike pet: %s\n", pet)
 	}
 	
-	pets = db.Find("pet", "owner", "Nai")
-	
-	for pets.Valid() {
-		var pet = pets.Next()
+	for pet := range db.Find("pet", "owner", "Nai") {
 		fmt.Printf("Found Nai pet: %s\n", pet)
 	}
 
@@ -73,11 +64,11 @@ func LinkBench() {
 	var db = loge.NewLogeDB(loge.NewLevelDBStore("data/linkbench"))
 	defer db.Close()
 
-	db.CreateType("person", 1, &Person{}, nil)
+	db.CreateType(loge.NewTypeDef("person", 1, &Person{}))
 
-	db.CreateType("pet", 1, &Pet{}, loge.LinkSpec{
-		"owner": "person",
-	})
+	var petDef = loge.NewTypeDef("pet", 1, &Pet{})
+	petDef.Links = loge.LinkSpec{ "owner": "person" }
+	db.CreateType(petDef)
 
 	fmt.Printf("Inserting...\n")
 
@@ -92,14 +83,16 @@ func LinkBench() {
 
 	fmt.Printf("Finding...\n")
 
-	var pets = db.Find("pet", "owner", "Brendon")
-
 	var count = 0
 
-	for pets.Valid() {
-		pets.Next()
-		count++
-	}
+	db.Transact(func (t *loge.Transaction) {
+		var pets = t.Find("pet", "owner", "Brendon")
+
+		for pets.Valid() {
+			pets.Next()
+			count++
+		}
+	}, 0)
 
 	fmt.Printf("Found %d pets\n", count)
 
@@ -109,11 +102,13 @@ func LinkBench() {
 
 	var loops = 0
 	for loops < 1000 {
-		var somePets = db.FindFrom("pet", "owner", "Brendon", lastPet, 100)
-		for somePets.Valid() {
-			lastPet = somePets.Next()
-			count++
-		}
+		db.Transact(func (t *loge.Transaction) {
+			var somePets = t.FindSlice("pet", "owner", "Brendon", lastPet, 100)
+			for somePets.Valid() {
+				lastPet = somePets.Next()
+				count++
+			}
+		}, 0)
 		loops++
 	}
 

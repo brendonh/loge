@@ -7,7 +7,7 @@ import (
 
 func Example() {
 	var db = loge.NewLogeDB(loge.NewLevelDBStore("data/example"))
-	db.CreateType("person", 1, &Person{}, nil)
+	db.CreateType(loge.NewTypeDef("person", 1, &Person{}))
 
 
 	// ------------------------------------

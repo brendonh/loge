@@ -7,7 +7,10 @@ import (
 
 func TestOneshotOps(test *testing.T) {
 	var db = NewLogeDB(NewMemStore())
-	db.CreateType("test", 1, &TestObj{}, LinkSpec{ "other": "test" })
+
+	var def = NewTypeDef("test", 1, &TestObj{})
+	def.Links = LinkSpec{ "other": "test" }
+	db.CreateType(def)
 
 	db.Transact(func (t *Transaction) {
 		t.Set("test", "foo", &TestObj{ "foo" })

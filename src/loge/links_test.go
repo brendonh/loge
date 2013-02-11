@@ -54,7 +54,10 @@ func TestLinks(t *testing.T) {
 
 func TestLinkStorage(test *testing.T) {
 	var db = NewLogeDB(NewMemStore())
-	db.CreateType("test", 1, &TestObj{}, LinkSpec{ "sibling": "test" })
+ 
+	var def = NewTypeDef("test", 1, &TestObj{})
+	def.Links = LinkSpec{ "sibling": "test" }
+	db.CreateType(def)
 
 	db.Transact(func (t *Transaction) {
 		var links = t.ReadLinks("test", "sibling", "one")
@@ -83,7 +86,10 @@ func TestLinkStorage(test *testing.T) {
 
 func TestLinkScoping(test *testing.T) {
 	var db = NewLogeDB(NewMemStore())
-	db.CreateType("test", 1, &TestObj{}, LinkSpec{ "sibling": "test" })
+
+	var def = NewTypeDef("test", 1, &TestObj{})
+	def.Links = LinkSpec{ "sibling": "test" }
+	db.CreateType(def)
 
 	var trans1 = db.CreateTransaction()
 	var trans2 = db.CreateTransaction()

@@ -1,13 +1,15 @@
 package loge
 
 import (
-	"fmt"
 	"time"
 	"sync/atomic"
 	"reflect"
 
 	"github.com/brendonh/spack"
 )
+
+
+
 
 type LogeDB struct {
 	types typeMap
@@ -40,24 +42,22 @@ func (db *LogeDB) Close() {
 	db.store.close()
 }
 
-func (db *LogeDB) CreateType(name string, version uint16, exemplar interface{}, linkSpec LinkSpec) *logeType {
-	_, ok := db.types[name]
+func (db *LogeDB) CreateType(def *TypeDef) *logeType {
+	var vt = db.store.getSpackType(def.Name)
 
-	if ok {
-		panic(fmt.Sprintf("Type exists: '%s'", name))
+	var spackExemplar interface{}
+	if def.Exemplar != nil {
+		spackExemplar = reflect.ValueOf(def.Exemplar).Elem().Interface()
+	} else {
+		spackExemplar = nil
 	}
 
-	var vt = db.store.getSpackType(name)
-	var spackExemplar = reflect.ValueOf(exemplar).Elem().Interface()
-	vt.AddVersion(version, spackExemplar, nil)
-	var typ = NewType(name, version, exemplar, linkSpec, vt)
-
-	db.types[name] = typ
+	vt.AddVersion(def.Version, spackExemplar, def.Upgrader)
+	var typ = newType(def.Name, def.Version, def.Exemplar, def.Links, vt)
+	db.types[typ.Name] = typ
 	db.store.registerType(typ)
-	
 	return typ
 }
-
 
 func (db *LogeDB) CreateTransaction() *Transaction {
 	var tID = db.lastSnapshotID
@@ -73,8 +73,14 @@ func (db *LogeDB) Transact(actor Transactor, timeout time.Duration) bool {
 	for {
 		var t = db.CreateTransaction()
 		actor(t)
+		if t.cancelled {
+			return false
+		}
 		if t.Commit() {
 			return true
+		}
+		if t.state != ABORTED {
+			break
 		}
 		if timeout > 0 && time.Since(start) > timeout {
 			break
@@ -82,15 +88,6 @@ func (db *LogeDB) Transact(actor Transactor, timeout time.Duration) bool {
 	}
 	return false
 }
-
-func (db *LogeDB) Find(typeName string, linkName string, target LogeKey) ResultSet {
-	return db.store.find(db.makeLinkRef(typeName, linkName, target))
-}
-
-func (db *LogeDB) FindFrom(typeName string, linkName string, target LogeKey, from LogeKey, limit int) ResultSet {	
-	return db.store.findSlice(db.makeLinkRef(typeName, linkName, target), from, limit)
-}
-
 
 func (db *LogeDB) FlushCache() int {
 	var count = 0
@@ -109,21 +106,25 @@ func (db *LogeDB) FlushCache() int {
 // One-shot Operations
 // -----------------------------------------------
 
-func (db *LogeDB) ExistsOne(typeName string, key LogeKey) bool {
-	var obj = db.store.get(makeObjRef(db.types[typeName], key))
-	return obj != nil
+func (db *LogeDB) ExistsOne(typeName string, key LogeKey) (exists bool) {
+	db.Transact(func (t *Transaction) {
+		exists = t.Exists(typeName, key)
+	}, 0)
+	return
 }
 
-func (db *LogeDB) ReadOne(typeName string, key LogeKey) interface{} {
-	var typ = db.types[typeName]
-	return typ.Decode(db.store.get(makeObjRef(db.types[typeName], key)))
+func (db *LogeDB) ReadOne(typeName string, key LogeKey) (obj interface{}) {
+	db.Transact(func (t *Transaction) {
+		obj = t.Read(typeName, key)
+	}, 0)
+	return
 }
 
-func (db *LogeDB) ReadLinksOne(typeName string, linkName string, key LogeKey) []string {
-	var blob = db.store.get(db.makeLinkRef(typeName, linkName, key))
-	var links linkList
-	spack.DecodeFromBytes(&links, db.linkTypeSpec, blob)
-	return links
+func (db *LogeDB) ReadLinksOne(typeName string, linkName string, key LogeKey) (links []string) {
+	db.Transact(func (t *Transaction) {
+		links = t.ReadLinks(typeName, linkName, key)
+	}, 0)
+	return
 }
 
 func (db *LogeDB) SetOne(typeName string, key LogeKey, obj interface{}) {
@@ -136,6 +137,20 @@ func (db *LogeDB) DeleteOne(typeName string, key LogeKey) {
 	db.Transact(func (t *Transaction) {
 		t.Delete(typeName, key)
 	}, 0)
+}
+
+func (db *LogeDB) Find(typeName string, linkName string, target LogeKey) (results []LogeKey) {
+	db.Transact(func (t *Transaction) {
+		results = t.Find(typeName, linkName, target).All()
+	}, 0)
+	return
+}
+
+func (db *LogeDB) FindFrom(typeName string, linkName string, target LogeKey, from LogeKey, limit int) (results []LogeKey) {	
+	db.Transact(func (t *Transaction) {
+		results = t.FindSlice(typeName, linkName, target, from, limit).All()
+	}, 0)
+	return
 }
 
 // -----------------------------------------------

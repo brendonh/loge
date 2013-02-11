@@ -55,7 +55,7 @@ func (obj *logeObject) getVersion(sID uint64) *objectVersion {
 	return version
 }
 
-func (obj *logeObject) applyVersion(object interface{}, context storeContext, sID uint64) {
+func (obj *logeObject) applyVersion(object interface{}, context transactionContext, sID uint64) {
 	var blob = obj.encode(object)
 
 	obj.Current = &objectVersion{
@@ -81,16 +81,16 @@ func (obj *logeObject) applyVersion(object interface{}, context storeContext, sI
 	}
 }
 
-func (obj *logeObject) decode(blob []byte) interface{} {
-	var object interface{}
+func (obj *logeObject) decode(blob []byte) (object interface{}, upgraded bool) {
 	if obj.LinkName == "" {
-		object = obj.Type.Decode(blob)
+		object, upgraded = obj.Type.Decode(blob)
 	} else {
 		var links linkList
 		spack.DecodeFromBytes(&links, obj.DB.linkTypeSpec, blob)
 		object = &linkSet{ Original: links }
+		upgraded = false
 	}
-	return object
+	return
 }
 
 func (obj *logeObject) encode(object interface{}) []byte {

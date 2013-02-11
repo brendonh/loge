@@ -26,7 +26,7 @@ func WriteBench() {
 func DoWrite(cores int, idx int) {
 	var db = loge.NewLogeDB(loge.NewLevelDBStore(fmt.Sprintf("data/bench%d", idx)))
 	defer db.Close()
-	db.CreateType("person", 1, &Person{}, nil)
+	db.CreateType(loge.NewTypeDef("person", 1, &Person{}))
 
 	var startTime = time.Now()
 

@@ -19,7 +19,7 @@ func BenchmarkNoContention(b *testing.B) {
 	var origProcs = runtime.GOMAXPROCS(procs)
 
 	var db = NewLogeDB(NewMemStore())
-	db.CreateType("counters", 1, &TestCounter{}, nil)
+	db.CreateType(NewTypeDef("counters", 1, &TestCounter{}))
 
 	db.Transact(func (t *Transaction) {
 		for i := 0; i < procs; i++ {
@@ -63,7 +63,7 @@ func BenchmarkContention(b *testing.B) {
 	var origProcs = runtime.GOMAXPROCS(procs)
 
 	var db = NewLogeDB(NewMemStore())
-	db.CreateType("counters", 1, &TestCounter{}, nil)
+	db.CreateType(NewTypeDef("counters", 1, &TestCounter{}))
 
 	db.Transact(func (t *Transaction) {
 		t.Set("counters", "contended", &TestCounter{Value: 0})

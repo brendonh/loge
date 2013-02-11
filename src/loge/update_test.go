@@ -4,7 +4,7 @@ import "testing"
 
 func TestSimpleUpdate(test *testing.T) {
 	var db = NewLogeDB(NewMemStore())
-	db.CreateType("test", 1, &TestObj{}, nil)
+	db.CreateType(NewTypeDef("test", 1, &TestObj{}))
 
 	db.Transact(func (t *Transaction) {
 		t.Set("test", "one", &TestObj{Name: "One"})
@@ -25,7 +25,7 @@ func TestSimpleUpdate(test *testing.T) {
 
 func TestReadWrite(test *testing.T) {
 	var db = NewLogeDB(NewMemStore())
-	db.CreateType("test", 1, &TestObj{}, nil)
+	db.CreateType(NewTypeDef("test", 1, &TestObj{}))
 
 	db.Transact(func (t *Transaction) {
 		t.Read("test", "one")
@@ -42,7 +42,7 @@ func TestReadWrite(test *testing.T) {
 
 func TestReadScoping(test *testing.T) {
 	var db = NewLogeDB(NewMemStore())
-	db.CreateType("test", 1, &TestObj{}, nil)
+	db.CreateType(NewTypeDef("test", 1, &TestObj{}))
 
 	var trans1 = db.CreateTransaction()
 	var trans2 = db.CreateTransaction()
@@ -74,7 +74,7 @@ func TestReadScoping(test *testing.T) {
 
 func TestUpdateScoping(test *testing.T) {
 	var db = NewLogeDB(NewMemStore())
-	db.CreateType("test", 1, &TestObj{}, nil)
+	db.CreateType(NewTypeDef("test", 1, &TestObj{}))
 
 	db.Transact(func (t *Transaction) {
 		t.Set("test", "one", &TestObj{Name: "One"})
@@ -116,7 +116,7 @@ func TestUpdateScoping(test *testing.T) {
 
 func TestUpdateConflict(test *testing.T) {
 	var db = NewLogeDB(NewMemStore())
-	db.CreateType("test", 1, &TestObj{}, nil)
+	db.CreateType(NewTypeDef("test", 1, &TestObj{}))
 
 	db.Transact(func (t *Transaction) {
 		t.Set("test", "one", &TestObj{Name: "One"})

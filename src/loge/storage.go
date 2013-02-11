@@ -5,7 +5,7 @@ import (
 )
 
 type LogeStore interface {
-	storeContext
+	get(objRef) []byte
 	close()
 	registerType(*logeType)
 	getSpackType(name string) *spack.VersionedType
@@ -19,7 +19,7 @@ type ResultSet interface {
 	Close()
 }
 
-type storeContext interface {
+type transactionContext interface {
 	get(objRef) []byte
 	store(objRef, []byte) error
 
@@ -28,10 +28,7 @@ type storeContext interface {
 
 	find(objRef) ResultSet
 	findSlice(objRef, LogeKey, int) ResultSet
-}
 
-type transactionContext interface {
-	storeContext
 	commit() error
 	rollback()
 }
@@ -81,32 +78,6 @@ func (store *memStore) get(ref objRef) []byte {
 	return enc
 }
 
-func (store *memStore) addIndex(ref objRef, key LogeKey) {
-}
-
-func (store *memStore) remIndex(ref objRef, key LogeKey) {
-}
-
-func (store *memStore) find(ref objRef) ResultSet {
-	// Until I can be bothered
-	panic("Find not implemented on memstore")
-}
-
-func (store *memStore) findSlice(ref objRef, from LogeKey, limit int) ResultSet {
-	// Until I can be bothered
-	panic("Find not implemented on memstore")
-}
-
-func (store *memStore) store(ref objRef, enc []byte) error {
-	store.lock.SpinLock()
-	defer store.lock.Unlock()
-	if len(enc) == 0 {
-		delete(store.objects, ref.CacheKey)
-	} else {
-		store.objects[ref.CacheKey] = enc
-	}
-	return nil
-}
 
 func (store *memStore) newContext() transactionContext {
 	return &memContext{
