@@ -51,6 +51,8 @@ func TestReadScoping(test *testing.T) {
 
 	trans1.Commit()
 
+	db.FlushCache()
+
 	if trans2.Read("test", "one").(*TestObj) != nil {
 		test.Errorf("Version visible in transaction created before obj create")
 	}
@@ -67,9 +69,9 @@ func TestReadScoping(test *testing.T) {
 		test.Errorf("Version visible in transaction created before update")
 	}
 
-	// if db.ReadOne("test", "one").(*TestObj).Name != "Two" {
-	// 	test.Errorf("Dirty read got wrong version")
-	// }
+	if db.ReadOne("test", "one").(*TestObj).Name != "Two" {
+		test.Errorf("One-shot read got wrong version")
+	}
 }
 
 func TestUpdateScoping(test *testing.T) {

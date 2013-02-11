@@ -37,6 +37,7 @@ type levelDBResultSet struct {
 type levelDBContext struct {
 	ldbStore *levelDBStore
 	snapshot *levigo.Snapshot
+	snapshotID uint64
 	readOptions *levigo.ReadOptions
 	batch []levelDBWriteEntry
 	result chan error
@@ -118,16 +119,6 @@ func (store *levelDBStore) getSpackType(name string) *spack.VersionedType {
 }
 
 
-func (store *levelDBStore) get(ref objRef) []byte {
-	val, err := store.db.Get(defaultReadOptions, []byte(ref.CacheKey))
-
-	if err != nil {
-		panic(fmt.Sprintf("Read error: %v\n", err))
-	}
-
-	return val
-}
-
 // -----------------------------------------------
 // Search
 // -----------------------------------------------
@@ -174,7 +165,7 @@ func (rs *levelDBResultSet) Close() {
 // Transaction Contexts
 // -----------------------------------------------
 
-func (store *levelDBStore) newContext() transactionContext {
+func (store *levelDBStore) newContext(sID uint64) transactionContext {
 	var snapshot = store.db.NewSnapshot()
 	var options = levigo.NewReadOptions()
 	options.SetSnapshot(snapshot)
@@ -182,6 +173,7 @@ func (store *levelDBStore) newContext() transactionContext {
 		ldbStore: store,
 		readOptions: options,
 		snapshot: snapshot,
+		snapshotID: sID,
 		batch: make([]levelDBWriteEntry, 0),
 		result: make(chan error),
 	}
@@ -200,8 +192,11 @@ func (store *levelDBStore) writer() {
 }
 
 
+func (context *levelDBContext) getSnapshotID() uint64 {
+	return context.snapshotID
+}
 
-func (context *levelDBContext) commit() error {
+func (context *levelDBContext) commit(sID uint64) error {
 	context.ldbStore.writeQueue <- context
 	var err = <-context.result
 	context.cleanup()
@@ -237,7 +232,13 @@ func (context *levelDBContext) Write() error {
 // -----------------------------------------------
 
 func (context *levelDBContext) get(ref objRef) []byte {
-	return context.ldbStore.get(ref)
+	val, err := context.ldbStore.db.Get(context.readOptions, []byte(ref.CacheKey))
+
+	if err != nil {
+		panic(fmt.Sprintf("Read error: %v\n", err))
+	}
+
+	return val
 }
 
 func (context *levelDBContext) store(ref objRef, enc []byte) error {

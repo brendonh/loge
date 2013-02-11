@@ -37,7 +37,7 @@ type Transaction struct {
 func NewTransaction(db *LogeDB, sID uint64) *Transaction {
 	return &Transaction{
 		db: db,
-		context: db.store.newContext(),
+		context: db.store.newContext(sID),
 		versions: make(map[string]*liveVersion),
 		state: ACTIVE,
 		snapshotID: sID,
@@ -140,17 +140,19 @@ func (t *Transaction) getVersion(ref objRef, forWrite bool, load bool) *liveVers
 		return lv
 	}
 
-	var logeObj = t.db.ensureObj(ref, load)
+	var version = t.db.acquireVersion(ref, t.context, load)
 
-	logeObj.Lock.SpinLock()
-	defer logeObj.Lock.Unlock()
+	object, upgraded := version.getObject()
 
-	logeObj.RefCount++
+	// logeObj.Lock.SpinLock()
+	// defer logeObj.Lock.Unlock()
 
-	var version *objectVersion
-	version = logeObj.getVersion(t.snapshotID)
+	// logeObj.RefCount++
 
-	object, upgraded := logeObj.decode(version.Blob)
+	// var version *objectVersion
+	// version = logeObj.getVersion(t.snapshotID)
+
+	//object, upgraded := logeObj.decode(version.Blob)
 
 	lv = &liveVersion{
 		version: version,
@@ -223,7 +225,7 @@ func (t *Transaction) tryCommit() bool {
 		lv.version.LogeObj.RefCount--
 	}
 
-	var err = context.commit()
+	var err = context.commit(sID)
 	if err != nil {
 		t.state = ERROR
 		fmt.Printf("Commit error: %v\n", err)

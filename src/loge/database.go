@@ -166,7 +166,7 @@ func (db *LogeDB) makeLinkRef(typeName string, linkName string, key LogeKey) obj
 }
 
 
-func (db *LogeDB) ensureObj(ref objRef, load bool) *logeObject {
+func (db *LogeDB) acquireVersion(ref objRef, context transactionContext, load bool) *objectVersion {
 	var typeName = ref.Type.Name
 	var key = ref.Key
 
@@ -176,42 +176,29 @@ func (db *LogeDB) ensureObj(ref objRef, load bool) *logeObject {
 	db.lock.SpinLock()
 	var obj, ok = db.cache[objKey]
 
-	if ok && (obj.Loaded || !load) {
-		db.lock.Unlock()
-		return obj
-	}
-
 	if !ok {
 		obj = initializeObject(db, typ, key)
-	} 
+		if ref.IsLink() { 
+			obj.LinkName = ref.LinkName
+		}
+	}
 
 	obj.Lock.SpinLock()
 	defer obj.Lock.Unlock()
 
 	db.cache[objKey] = obj	
-
 	db.lock.Unlock()
 
-	var version *objectVersion
+	obj.RefCount++
 
-	var blob []byte
-	if load {
-		blob = db.store.get(ref)
-		obj.Loaded = true
+	var version = obj.ensureVersion(context.getSnapshotID())
+
+	if load && !version.loaded {
+		version.Blob = context.get(ref)
+		version.loaded = true
 	}
 
-	version = &objectVersion {
-		LogeObj: obj,
-		Blob: blob,
-	}
-
-	if ref.IsLink() { 
-		obj.LinkName = ref.LinkName
-
-	}
-
-	obj.Current = version
-	return obj
+	return version
 }
 
 

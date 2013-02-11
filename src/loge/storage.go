@@ -5,11 +5,10 @@ import (
 )
 
 type LogeStore interface {
-	get(objRef) []byte
 	close()
 	registerType(*logeType)
 	getSpackType(name string) *spack.VersionedType
-	newContext() transactionContext
+	newContext(uint64) transactionContext
 }
 
 type ResultSet interface {
@@ -20,6 +19,8 @@ type ResultSet interface {
 }
 
 type transactionContext interface {
+	getSnapshotID() uint64
+
 	get(objRef) []byte
 	store(objRef, []byte) error
 
@@ -29,11 +30,29 @@ type transactionContext interface {
 	find(objRef) ResultSet
 	findSlice(objRef, LogeKey, int) ResultSet
 
-	commit() error
+	commit(uint64) error
 	rollback()
 }
 
-type objectMap map[string][]byte
+type memVersion struct {
+	snapshotID uint64
+	blob []byte
+}
+
+type memVersionHistory []memVersion
+
+func (mvh memVersionHistory) findPrevious(sID uint64) []byte {
+	for i := len(mvh)-1; i >= 0; i-- {
+		if mvh[i].snapshotID <= sID {
+			return mvh[i].blob
+		}
+	}
+	return nil
+}
+
+
+
+type objectMap map[string]memVersionHistory
 
 
 type memStore struct {
@@ -44,6 +63,7 @@ type memStore struct {
 
 type memContext struct {
 	mstore *memStore
+	snapshotID uint64
 	writes []memWriteEntry
 }
 
@@ -70,23 +90,25 @@ func (store *memStore) getSpackType(name string) *spack.VersionedType {
 	return store.spackTypes.RegisterType(name)
 }
 
-func (store *memStore) get(ref objRef) []byte {
-	enc, ok := store.objects[ref.CacheKey]
+
+func (store *memStore) newContext(sID uint64) transactionContext {
+	return &memContext{
+		mstore: store,
+		snapshotID: sID,
+	}
+}
+
+func (context *memContext) getSnapshotID() uint64 {
+	return context.snapshotID
+}
+
+
+func (context *memContext) get(ref objRef) []byte {
+	mvh, ok := context.mstore.objects[ref.CacheKey]
 	if !ok {
 		return nil
 	}
-	return enc
-}
-
-
-func (store *memStore) newContext() transactionContext {
-	return &memContext{
-		mstore: store,
-	}
-}
-
-func (context *memContext) get(ref objRef) []byte {
-	return context.mstore.get(ref)
+	return mvh.findPrevious(context.snapshotID)
 }
 
 func (context *memContext) store(ref objRef, enc []byte) error {
@@ -115,16 +137,14 @@ func (context *memContext) findSlice(ref objRef, from LogeKey, limit int) Result
 	panic("Find not implemented on memstore")
 }
 
-func (context *memContext) commit() error {
+func (context *memContext) commit(sID uint64) error {
 	var store = context.mstore
 	store.lock.SpinLock()
 	defer store.lock.Unlock()
 	for _, entry := range context.writes {
-		if len(entry.Value) == 0 {
-			delete(store.objects, entry.CacheKey)
-		} else {
-			store.objects[entry.CacheKey] = entry.Value
-		}
+		var mv = memVersion{ sID, entry.Value }
+		var mvh = store.objects[entry.CacheKey]
+		store.objects[entry.CacheKey] = append(mvh, mv)
 	}
 	return nil
 }

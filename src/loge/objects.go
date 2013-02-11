@@ -15,7 +15,6 @@ type logeObject struct {
 	RefCount uint32
 	LinkName string
 	Lock spinLock
-	Loaded bool
 }
 
 type objectVersion struct {
@@ -23,6 +22,7 @@ type objectVersion struct {
 	Blob []byte
 	snapshotID uint64
 	Previous *objectVersion
+	loaded bool
 }
 
 
@@ -33,7 +33,6 @@ func initializeObject(db *LogeDB, t *logeType, key LogeKey) *logeObject {
 		Key: key,
 		Current: nil,
 		RefCount: 0,
-		Loaded: false,
 	}
 }
 
@@ -44,15 +43,37 @@ func (obj *logeObject) makeObjRef() objRef {
 	return makeObjRef(obj.Type, obj.Key)
 }
 
-func (obj *logeObject) getVersion(sID uint64) *objectVersion {
-	var version = obj.Current
-	for version.snapshotID > sID {
-		version = version.Previous
-		if version == nil {
-			panic("Couldn't find version")
+func (obj *logeObject) ensureVersion(sID uint64) *objectVersion {
+	var current = obj.Current
+
+	if current == nil {
+		current = &objectVersion{
+			LogeObj: obj,
+			snapshotID: sID,
 		}
+		obj.Current = current
+		return current
 	}
-	return version
+
+	var next = current
+	for current != nil && current.snapshotID > sID {
+		next = current
+		current = current.Previous
+	}
+
+	if current.snapshotID == sID {
+		return current
+	}
+
+	var newVersion = &objectVersion{
+		LogeObj: obj,
+		snapshotID: sID,
+	}
+
+	newVersion.Previous = current
+	next.Previous = newVersion
+	
+	return newVersion
 }
 
 func (obj *logeObject) applyVersion(object interface{}, context transactionContext, sID uint64) {
@@ -63,8 +84,8 @@ func (obj *logeObject) applyVersion(object interface{}, context transactionConte
 		Blob: blob,
 		Previous: obj.Current,
 		snapshotID: sID,
+		loaded: true,
 	}
-	obj.Loaded = true
 
 	var ref = obj.makeObjRef()
 	context.store(ref, blob)
@@ -114,3 +135,7 @@ func (obj *logeObject) hasValue(object interface{}) bool {
 	return !reflect.ValueOf(object).IsNil()
 }
 
+
+func (version *objectVersion) getObject() (interface{}, bool) {
+	return version.LogeObj.decode(version.Blob)
+}
