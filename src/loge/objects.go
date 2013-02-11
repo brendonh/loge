@@ -39,9 +39,9 @@ func initializeObject(db *LogeDB, t *logeType, key LogeKey) *logeObject {
 
 func (obj *logeObject) makeObjRef() objRef {
 	if obj.LinkName != "" {
-		return makeLinkRef(obj.Type.Name, obj.LinkName, obj.Key)
+		return makeLinkRef(obj.Type, obj.LinkName, obj.Key)
 	}
-	return makeObjRef(obj.Type.Name, obj.Key)
+	return makeObjRef(obj.Type, obj.Key)
 }
 
 func (obj *logeObject) getVersion(sID uint64) *objectVersion {
@@ -71,11 +71,12 @@ func (obj *logeObject) applyVersion(object interface{}, context storeContext, sI
 
 	if obj.LinkName != "" {
 		var links = object.(*linkSet)
+		
 		for _, target := range links.Removed {
-			context.remIndex(ref, LogeKey(target))
+			context.remIndex(makeLinkRef(obj.Type, obj.LinkName, LogeKey(target)), obj.Key)
 		}
 		for _, target := range links.Added {
-			context.addIndex(ref, LogeKey(target))
+			context.addIndex(makeLinkRef(obj.Type, obj.LinkName, LogeKey(target)), obj.Key)
 		}
 	}
 }

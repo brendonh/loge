@@ -84,11 +84,11 @@ func (db *LogeDB) Transact(actor Transactor, timeout time.Duration) bool {
 }
 
 func (db *LogeDB) Find(typeName string, linkName string, target LogeKey) ResultSet {
-	return db.store.find(makeLinkRef(typeName, linkName, ""), target)
+	return db.store.find(db.makeLinkRef(typeName, linkName, target))
 }
 
 func (db *LogeDB) FindFrom(typeName string, linkName string, target LogeKey, from LogeKey, limit int) ResultSet {	
-	return db.store.findSlice(makeLinkRef(typeName, linkName, ""), target, from, limit)
+	return db.store.findSlice(db.makeLinkRef(typeName, linkName, target), from, limit)
 }
 
 
@@ -110,17 +110,17 @@ func (db *LogeDB) FlushCache() int {
 // -----------------------------------------------
 
 func (db *LogeDB) ExistsOne(typeName string, key LogeKey) bool {
-	var obj = db.store.get(makeObjRef(typeName, key))
+	var obj = db.store.get(makeObjRef(db.types[typeName], key))
 	return obj != nil
 }
 
 func (db *LogeDB) ReadOne(typeName string, key LogeKey) interface{} {
 	var typ = db.types[typeName]
-	return typ.Decode(db.store.get(makeObjRef(typeName, key)))
+	return typ.Decode(db.store.get(makeObjRef(db.types[typeName], key)))
 }
 
 func (db *LogeDB) ReadLinksOne(typeName string, linkName string, key LogeKey) []string {
-	var blob = db.store.get(makeLinkRef(typeName, linkName, key))
+	var blob = db.store.get(db.makeLinkRef(typeName, linkName, key))
 	var links linkList
 	spack.DecodeFromBytes(&links, db.linkTypeSpec, blob)
 	return links
@@ -142,8 +142,17 @@ func (db *LogeDB) DeleteOne(typeName string, key LogeKey) {
 // Internals
 // -----------------------------------------------
 
+func (db *LogeDB) makeObjRef(typeName string, key LogeKey) objRef {
+	return makeObjRef(db.types[typeName], key)
+}
+
+func (db *LogeDB) makeLinkRef(typeName string, linkName string, key LogeKey) objRef {
+	return makeLinkRef(db.types[typeName], linkName, key)
+}
+
+
 func (db *LogeDB) ensureObj(ref objRef, load bool) *logeObject {
-	var typeName = ref.TypeName
+	var typeName = ref.Type.Name
 	var key = ref.Key
 
 	var objKey = ref.String()

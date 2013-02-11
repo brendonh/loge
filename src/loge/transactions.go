@@ -52,47 +52,47 @@ func (t *Transaction) GetState() TransactionState {
 }
 
 func (t *Transaction) Exists(typeName string, key LogeKey) bool {
-	var lv = t.getVersion(makeObjRef(typeName, key), false, true)
+	var lv = t.getVersion(t.db.makeObjRef(typeName, key), false, true)
 	return lv.version.LogeObj.hasValue(lv.object)
 }
 
 
 func (t *Transaction) Read(typeName string, key LogeKey) interface{} {
-	return t.getVersion(makeObjRef(typeName, key), false, true).object
+	return t.getVersion(t.db.makeObjRef(typeName, key), false, true).object
 }
 
 
 func (t *Transaction) Write(typeName string, key LogeKey) interface{} {
-	return t.getVersion(makeObjRef(typeName, key), true, true).object
+	return t.getVersion(t.db.makeObjRef(typeName, key), true, true).object
 }
 
 
 func (t *Transaction) Set(typeName string, key LogeKey, obj interface{}) {
-	var version = t.getVersion(makeObjRef(typeName, key), true, false)
+	var version = t.getVersion(t.db.makeObjRef(typeName, key), true, false)
 	version.object = obj
 }
 
 
 func (t *Transaction) Delete(typeName string, key LogeKey) {
-	var version = t.getVersion(makeObjRef(typeName, key), true, true)
+	var version = t.getVersion(t.db.makeObjRef(typeName, key), true, true)
 	version.object = version.version.LogeObj.Type.NilValue()
 }
 
 
 func (t *Transaction) ReadLinks(typeName string, linkName string, key LogeKey) []string {
-	return t.getLink(makeLinkRef(typeName, linkName, key), false, true).ReadKeys()
+	return t.getLink(t.db.makeLinkRef(typeName, linkName, key), false, true).ReadKeys()
 }
 
 func (t *Transaction) HasLink(typeName string, linkName string, key LogeKey, target LogeKey) bool {
-	return t.getLink(makeLinkRef(typeName, linkName, key), false, true).Has(string(target))
+	return t.getLink(t.db.makeLinkRef(typeName, linkName, key), false, true).Has(string(target))
 }
 
 func (t *Transaction) AddLink(typeName string, linkName string, key LogeKey, target LogeKey) {
-	t.getLink(makeLinkRef(typeName, linkName, key), true, true).Add(string(target))
+	t.getLink(t.db.makeLinkRef(typeName, linkName, key), true, true).Add(string(target))
 }
 
 func (t *Transaction) RemoveLink(typeName string, linkName string, key LogeKey, target LogeKey) {
-	t.getLink(makeLinkRef(typeName, linkName, key), true, true).Remove(string(target))
+	t.getLink(t.db.makeLinkRef(typeName, linkName, key), true, true).Remove(string(target))
 }
 
 func (t *Transaction) SetLinks(typeName string, linkName string, key LogeKey, targets []LogeKey) {
@@ -101,15 +101,15 @@ func (t *Transaction) SetLinks(typeName string, linkName string, key LogeKey, ta
 	for _, key := range targets {
 		stringTargets = append(stringTargets, string(key))
 	}
-	t.getLink(makeLinkRef(typeName, linkName, key), true, true).Set(stringTargets)
+	t.getLink(t.db.makeLinkRef(typeName, linkName, key), true, true).Set(stringTargets)
 }
 
 func (t *Transaction) Find(typeName string, linkName string, target LogeKey) ResultSet {
-	return t.context.find(makeLinkRef(typeName, linkName, ""), target)
+	return t.context.find(t.db.makeLinkRef(typeName, linkName, target))
 }
 
 func (t *Transaction) FindSlice(typeName string, linkName string, target LogeKey, from LogeKey, limit int) ResultSet {	
-	return t.context.findSlice(makeLinkRef(typeName, linkName, ""), target, from, limit)
+	return t.context.findSlice(t.db.makeLinkRef(typeName, linkName, target), from, limit)
 }
 
 // -----------------------------------------------

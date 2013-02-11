@@ -24,7 +24,7 @@ func NewType(name string, version uint16, exemplar interface{}, linkSpec LinkSpe
 		infos[k] = &linkInfo{
 			Name: k,
 			Target: v,
-			Tag: 0,
+			Tag: 1,
 		}
 	}
 

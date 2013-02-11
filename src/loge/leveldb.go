@@ -16,7 +16,6 @@ const ldb_INDEX_TAG uint16 = 4
 const ldb_START_TAG uint16 = 8
 
 type levelDBWriter interface {
-	GetLogeType(string) *logeType
 	Put([]byte, []byte) error
 	Delete([]byte) error
 }
@@ -25,11 +24,9 @@ type levelDBStore struct {
 	basePath string
 	db *levigo.DB
 	types *spack.TypeSet
-	logeTypes map[string]*logeType
 
 	writeQueue chan *levelDBContext
 	flushed bool
-
 }
 
 type levelDBResultSet struct {
@@ -72,7 +69,6 @@ func NewLevelDBStore(basePath string) LogeStore {
 		basePath: basePath,
 		db: db,
 		types: spack.NewTypeSet(),
-		logeTypes: make(map[string]*logeType),
 		
 		writeQueue: make(chan *levelDBContext),
 		flushed: false,
@@ -94,7 +90,6 @@ func (store *levelDBStore) close() {
 }
 
 func (store *levelDBStore) registerType(typ *logeType) {
-	store.logeTypes[typ.Name] = typ
 	store.tagVersions(typ)
 
 	var vt = typ.SpackType
@@ -126,10 +121,6 @@ func (store *levelDBStore) getSpackType(name string) *spack.VersionedType {
 	return store.types.RegisterType(name)
 }
 
-func (store *levelDBStore) GetLogeType(typeName string) *logeType {
-	return store.logeTypes[typeName]
-}
-
 func (store *levelDBStore) Put(key []byte, val []byte) error {
 	return store.db.Put(defaultWriteOptions, key, val)
 }
@@ -140,18 +131,7 @@ func (store *levelDBStore) Delete(key []byte) error {
 
 
 func (store *levelDBStore) get(ref objRef) []byte {
-	var typ = store.logeTypes[ref.TypeName]
-	var vt = typ.SpackType
-
-	var key []byte
-	if ref.LinkName == "" {
-		key = vt.EncodeKey(string(ref.Key))
-	} else {
-		var linkInfo = typ.Links[ref.LinkName]
-		key = encodeTaggedKey([]uint16{ldb_LINK_TAG, vt.Tag, linkInfo.Tag}, string(ref.Key))
-	}
-
-	val, err := store.db.Get(defaultReadOptions, key)
+	val, err := store.db.Get(defaultReadOptions, []byte(ref.CacheKey))
 
 	if err != nil {
 		panic(fmt.Sprintf("Read error: %v\n", err))
@@ -164,24 +144,24 @@ func (store *levelDBStore) store(ref objRef, enc []byte) error {
 	return ldb_store(store, ref, enc)
 }
 
-func (store *levelDBStore) addIndex(ref objRef, target LogeKey) {
-	ldb_addIndex(store, ref, target)
+func (store *levelDBStore) addIndex(ref objRef, source LogeKey) {
+	ldb_addIndex(store, ref, source)
 }
 
-func (store *levelDBStore) remIndex(ref objRef, target LogeKey) {
-	ldb_remIndex(store, ref, target)
+func (store *levelDBStore) remIndex(ref objRef, source LogeKey) {
+	ldb_remIndex(store, ref, source)
 }
 
 // -----------------------------------------------
 // Search
 // -----------------------------------------------
 
-func (store *levelDBStore) find(ref objRef, key LogeKey) ResultSet {
-	return ldb_find(store, defaultReadOptions, ref, key, "", -1)
+func (store *levelDBStore) find(ref objRef) ResultSet {
+	return ldb_find(store, defaultReadOptions, ref, "", -1)
 }
 
-func (store *levelDBStore) findSlice(ref objRef, key LogeKey, from LogeKey, limit int) ResultSet {
-	return ldb_find(store, defaultReadOptions, ref, key, from, limit)
+func (store *levelDBStore) findSlice(ref objRef, from LogeKey, limit int) ResultSet {
+	return ldb_find(store, defaultReadOptions, ref, from, limit)
 }
 
 func (rs *levelDBResultSet) Valid() bool {
@@ -252,10 +232,6 @@ func (store *levelDBStore) writer() {
 }
 
 
-func (context *levelDBContext) GetLogeType(typeName string) *logeType {
-	return context.ldbStore.logeTypes[typeName]
-}
-
 func (context *levelDBContext) Put(key []byte, val []byte) error {
 	context.batch = append(context.batch, levelDBWriteEntry{ key, val, false })
 	return nil
@@ -300,20 +276,20 @@ func (context *levelDBContext) store(ref objRef, enc []byte) error {
 	return ldb_store(context, ref, enc)
 }
 
-func (context *levelDBContext) addIndex(ref objRef, target LogeKey) {
-	ldb_addIndex(context, ref, target)
+func (context *levelDBContext) addIndex(ref objRef, source LogeKey) {
+	ldb_addIndex(context, ref, source)
 }
 
-func (context *levelDBContext) remIndex(ref objRef, target LogeKey) {
-	ldb_remIndex(context, ref, target)
+func (context *levelDBContext) remIndex(ref objRef, source LogeKey) {
+	ldb_remIndex(context, ref, source)
 }
 
-func (context *levelDBContext) find(ref objRef, target LogeKey) ResultSet {
-	return ldb_find(context.ldbStore, context.readOptions, ref, target, "", -1)
+func (context *levelDBContext) find(ref objRef) ResultSet {
+	return ldb_find(context.ldbStore, context.readOptions, ref, "", -1)
 }
 
-func (context *levelDBContext) findSlice(ref objRef, key LogeKey, from LogeKey, limit int) ResultSet {
-	return ldb_find(context.ldbStore, context.readOptions, ref, key, from, limit)
+func (context *levelDBContext) findSlice(ref objRef, from LogeKey, limit int) ResultSet {
+	return ldb_find(context.ldbStore, context.readOptions, ref, from, limit)
 }
 
 func (context *levelDBContext) get(ref objRef) []byte {
@@ -383,6 +359,14 @@ func (store *levelDBStore) tagVersions(typ *logeType) {
 // Key encoding
 // -----------------------------------------------
 
+func encodeLDBKey(typeTag uint16, ref objRef) []byte {
+	var keyBytes = []byte(ref.CacheKey)
+	var buf = bytes.NewBuffer(make([]byte, 0, len(keyBytes) + 2))
+	binary.Write(buf, binary.BigEndian, typeTag)
+	buf.Write(keyBytes)
+	return buf.Bytes()
+}
+
 func encodeTaggedKey(tags []uint16, key string) []byte {
 	var keyBytes = []byte(key)
 	var buf = bytes.NewBuffer(make([]byte, 0, len(keyBytes) + (2 * len(tags))))
@@ -394,21 +378,13 @@ func encodeTaggedKey(tags []uint16, key string) []byte {
 }
 
 func encodeIndexKey(writer levelDBWriter, ref objRef, target LogeKey) []byte {
-	var typ = writer.GetLogeType(ref.TypeName)
-	var vt = typ.SpackType
-	var linkInfo = typ.Links[ref.LinkName]
-	
-	var tags = []uint16{ldb_INDEX_TAG, vt.Tag, linkInfo.Tag}
-
-	var source = ref.Key
-
-	var buf = bytes.NewBuffer(make([]byte, 0, (2 * len(tags)) + len(target) + len(source)))
-	for _, tag := range tags {
-		binary.Write(buf, binary.BigEndian, tag)
-	}
-	buf.Write([]byte(target))
+	var targetBytes = []byte(ref.CacheKey)
+	var sourceBytes = []byte(target)
+	var buf = bytes.NewBuffer(make([]byte, 0, 3 + len(targetBytes) + len(sourceBytes)))
+	binary.Write(buf, binary.BigEndian, ldb_INDEX_TAG)
+	buf.Write(targetBytes)
 	buf.Write([]byte{0})
-	buf.Write([]byte(source))
+	buf.Write(sourceBytes)
 	return buf.Bytes()
 }
 
@@ -419,16 +395,7 @@ func encodeIndexKey(writer levelDBWriter, ref objRef, target LogeKey) []byte {
 
 
 func ldb_store(writer levelDBWriter, ref objRef, enc []byte) error {
-	var typ = writer.GetLogeType(ref.TypeName)
-	var vt = typ.SpackType
-
-	var key []byte
-	if ref.LinkName == "" {
-		key = vt.EncodeKey(string(ref.Key))
-	} else {
-		var linkInfo = typ.Links[ref.LinkName]
-		key = encodeTaggedKey([]uint16{ldb_LINK_TAG, vt.Tag, linkInfo.Tag}, string(ref.Key))
-	}
+	var key = []byte(ref.CacheKey)
 
 	if len(enc) == 0 {
 		writer.Delete(key)
@@ -440,18 +407,18 @@ func ldb_store(writer levelDBWriter, ref objRef, enc []byte) error {
 	return nil
 }
 
-func ldb_addIndex(writer levelDBWriter, ref objRef, target LogeKey) {
-	var key = encodeIndexKey(writer, ref, target)
+func ldb_addIndex(writer levelDBWriter, ref objRef, source LogeKey) {
+	var key = encodeIndexKey(writer, ref, source)
 	writer.Put(key, []byte{})
 }
 
-func ldb_remIndex(writer levelDBWriter, ref objRef, target LogeKey) {
-	var key = encodeIndexKey(writer, ref, target)
+func ldb_remIndex(writer levelDBWriter, ref objRef, source LogeKey) {
+	var key = encodeIndexKey(writer, ref, source)
 	writer.Delete(key)
 }
 
 func ldb_find(store *levelDBStore, readOptions *levigo.ReadOptions,
-	ref objRef, target LogeKey, from LogeKey, limit int) ResultSet {
+	ref objRef, from LogeKey, limit int) ResultSet {
 
 	if limit == 0 {
 		return &levelDBResultSet {
@@ -459,11 +426,8 @@ func ldb_find(store *levelDBStore, readOptions *levigo.ReadOptions,
 		}
 	}
 
-	var vt = store.types.Type(ref.TypeName)
-	var linkInfo = store.logeTypes[ref.TypeName].Links[ref.LinkName]
-
 	var prefix = append(
-		encodeTaggedKey([]uint16{ldb_INDEX_TAG, vt.Tag, linkInfo.Tag}, string(target)),
+		encodeLDBKey(ldb_INDEX_TAG, ref),
 		0)
 
 	var it = store.iteratePrefix(prefix, []byte(from), readOptions)

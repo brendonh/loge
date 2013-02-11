@@ -26,8 +26,8 @@ type storeContext interface {
 	addIndex(objRef, LogeKey)
 	remIndex(objRef, LogeKey)
 
-	find(objRef, LogeKey) ResultSet
-	findSlice(objRef, LogeKey, LogeKey, int) ResultSet
+	find(objRef) ResultSet
+	findSlice(objRef, LogeKey, int) ResultSet
 }
 
 type transactionContext interface {
@@ -87,12 +87,12 @@ func (store *memStore) addIndex(ref objRef, key LogeKey) {
 func (store *memStore) remIndex(ref objRef, key LogeKey) {
 }
 
-func (store *memStore) find(ref objRef, key LogeKey) ResultSet {
+func (store *memStore) find(ref objRef) ResultSet {
 	// Until I can be bothered
 	panic("Find not implemented on memstore")
 }
 
-func (store *memStore) findSlice(ref objRef, key LogeKey, from LogeKey, limit int) ResultSet {
+func (store *memStore) findSlice(ref objRef, from LogeKey, limit int) ResultSet {
 	// Until I can be bothered
 	panic("Find not implemented on memstore")
 }
@@ -134,12 +134,12 @@ func (context *memContext) addIndex(ref objRef, key LogeKey) {
 
 func (context *memContext) remIndex(ref objRef, key LogeKey) {
 }
-func (context *memContext) find(ref objRef, key LogeKey) ResultSet {
+func (context *memContext) find(ref objRef) ResultSet {
 	// Until I can be bothered
 	panic("Find not implemented on memstore")
 }
 
-func (context *memContext) findSlice(ref objRef, key LogeKey, from LogeKey, limit int) ResultSet {
+func (context *memContext) findSlice(ref objRef, from LogeKey, limit int) ResultSet {
 	// Until I can be bothered
 	panic("Find not implemented on memstore")
 }
