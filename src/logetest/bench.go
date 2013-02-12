@@ -49,7 +49,6 @@ func DoWrite(cores int, idx int) {
 	}
 
 	fmt.Printf("Done in %v\n", time.Since(startTime))
-	db.FlushCache()
 
 	fmt.Printf("Flushed\n")
 

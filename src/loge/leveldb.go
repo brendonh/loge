@@ -326,7 +326,7 @@ func (store *levelDBStore) loadTypeMetadata() {
 	defer it.Close()
 
 	for it = it; it.Valid(); it.Next() {
-		var typeInfo, _, err = typeType.DecodeObj(it.Value())
+		var typeInfo, _, err = typeType.DecodeObj(it.Value(), false)
 
 		if err != nil {
 			panic(fmt.Sprintf("Error loading type info: %v", err))

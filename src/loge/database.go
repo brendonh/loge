@@ -67,9 +67,19 @@ func (db *LogeDB) newSnapshotID() uint64 {
 }
 
 func (db *LogeDB) Transact(actor Transactor, timeout time.Duration) bool {
+	var t = db.CreateTransaction()
+	return db.doTransact(t, actor, timeout)
+}
+
+func (db *LogeDB) TransactJSON(actor Transactor, timeout time.Duration) bool {
+	var t = db.CreateTransaction()
+	t.giveJSON = true
+	return db.doTransact(t, actor, timeout)
+}
+
+func (db *LogeDB) doTransact(t *Transaction, actor Transactor, timeout time.Duration) bool {
 	var start = time.Now()
 	for {
-		var t = db.CreateTransaction()
 		actor(t)
 		if t.cancelled {
 			return false
@@ -131,7 +141,7 @@ func (db *LogeDB) Find(typeName string, linkName string, target LogeKey) (result
 	return
 }
 
-func (db *LogeDB) FindFrom(typeName string, linkName string, target LogeKey, from LogeKey, limit int) (results []LogeKey) {	
+func (db *LogeDB) FindSlice(typeName string, linkName string, target LogeKey, from LogeKey, limit int) (results []LogeKey) {	
 	db.Transact(func (t *Transaction) {
 		results = t.FindSlice(typeName, linkName, target, from, limit).All()
 	}, 0)

@@ -32,6 +32,7 @@ type Transaction struct {
 	state TransactionState
 	snapshotID uint64
 	cancelled bool
+	giveJSON bool
 }
 
 func NewTransaction(db *LogeDB, sID uint64) *Transaction {
@@ -142,7 +143,7 @@ func (t *Transaction) getVersion(ref objRef, forWrite bool, load bool) *liveVers
 
 	var version = t.db.acquireVersion(ref, t.context, load)
 
-	object, upgraded := version.getObject()
+	object, upgraded := version.getObject(t.giveJSON)
 
 	lv = &liveVersion{
 		version: version,

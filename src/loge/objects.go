@@ -102,9 +102,9 @@ func (obj *logeObject) applyVersion(object interface{}, context transactionConte
 	}
 }
 
-func (obj *logeObject) decode(blob []byte) (object interface{}, upgraded bool) {
+func (obj *logeObject) decode(blob []byte, toJSON bool) (object interface{}, upgraded bool) {
 	if obj.LinkName == "" {
-		object, upgraded = obj.Type.Decode(blob)
+		object, upgraded = obj.Type.Decode(blob, toJSON)
 	} else {
 		var links linkList
 		spack.DecodeFromBytes(&links, obj.DB.linkTypeSpec, blob)
@@ -136,6 +136,6 @@ func (obj *logeObject) hasValue(object interface{}) bool {
 }
 
 
-func (version *objectVersion) getObject() (interface{}, bool) {
-	return version.LogeObj.decode(version.Blob)
+func (version *objectVersion) getObject(toJSON bool) (interface{}, bool) {
+	return version.LogeObj.decode(version.Blob, toJSON)
 }

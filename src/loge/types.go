@@ -59,12 +59,16 @@ func (t *logeType) NilValue() interface{} {
 	return reflect.Zero(reflect.TypeOf(t.Exemplar)).Interface()
 }
 
-func (t *logeType) Decode(enc []byte) (interface{}, bool) {
+func (t *logeType) Decode(enc []byte, toJSON bool) (interface{}, bool) {
 	if len(enc) == 0 {
-		return t.NilValue(), false
+		if toJSON {
+			return nil, false
+		} else {
+			return t.NilValue(), false
+		}
 	}
 
-	obj, upgraded, err := t.SpackType.DecodeObj(enc)
+	obj, upgraded, err := t.SpackType.DecodeObj(enc, toJSON)
 	if err != nil {
 		panic(fmt.Sprintf("Decode error: %v", err))
 	}
