@@ -301,6 +301,34 @@ func (context *levelDBContext) findSlice(ref objRef, from LogeKey, limit int) Re
 }
 
 
+func (context *levelDBContext) listSlice(prefix []byte, from LogeKey, limit int) ResultSet {
+	if limit == 0 {
+		return &levelDBResultSet {
+			closed: true,
+		}
+	}
+
+	var it = context.ldbStore.iteratePrefix(prefix, []byte(from), context.readOptions)
+	if !it.Valid() {
+		it.Close()
+		return &levelDBResultSet {
+			closed: true,
+		}
+	}
+
+	var prefixLen = len(prefix)
+	var next = string(it.Key()[prefixLen:])
+
+	return &levelDBResultSet{
+		it: it,
+		prefixLen: prefixLen,
+		next: next,
+		closed: false,
+		limit: limit,
+		count: 0,
+	}
+}
+
 // -----------------------------------------------
 // Helpers
 // -----------------------------------------------

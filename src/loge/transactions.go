@@ -115,6 +115,15 @@ func (t *Transaction) FindSlice(typeName string, linkName string, target LogeKey
 	return t.context.findSlice(t.db.makeLinkRef(typeName, linkName, target), from, limit)
 }
 
+func (t *Transaction) ListSlice(typeName string, from LogeKey, limit int) ResultSet {	
+	typ, ok := t.db.types[typeName]
+	if !ok {
+		panic(fmt.Sprintf("No such type %s\n", typeName))
+	}
+	var prefix = typePrefix(typ)
+	return t.context.listSlice(prefix, from, limit)
+}
+
 // -----------------------------------------------
 // Internals
 // -----------------------------------------------

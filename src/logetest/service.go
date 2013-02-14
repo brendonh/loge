@@ -10,6 +10,14 @@ import (
 	"github.com/brendonh/go-service"
 )
 
+type context struct {
+	goservice.Server
+	db *loge.LogeDB
+}
+
+func (c *context) DB() *loge.LogeDB {
+	return c.db
+}
 
 func StartService() {
 	var db = loge.NewLogeDB(loge.NewLevelDBStore("data/links"))
@@ -24,7 +32,7 @@ func StartService() {
 	var serviceCollection = goservice.NewServiceCollection()
 	serviceCollection.AddService(loge.GetService())
 
-	var server = &loge.LogeServiceContext{
+	var server = &context{
 		*goservice.NewServer(
 			serviceCollection,
 			goservice.BasicSessionCreator),

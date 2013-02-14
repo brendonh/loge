@@ -1,6 +1,7 @@
 package loge
 
 import (
+	"fmt"
 	"time"
 	"sync/atomic"
 	"reflect"
@@ -148,16 +149,31 @@ func (db *LogeDB) FindSlice(typeName string, linkName string, target LogeKey, fr
 	return
 }
 
+func (db *LogeDB) ListSlice(typeName string, from LogeKey, limit int) (results []LogeKey) {	
+	db.Transact(func (t *Transaction) {
+		results = t.ListSlice(typeName, from, limit).All()
+	}, 0)
+	return
+}
+
 // -----------------------------------------------
 // Internals
 // -----------------------------------------------
 
 func (db *LogeDB) makeObjRef(typeName string, key LogeKey) objRef {
-	return makeObjRef(db.types[typeName], key)
+	typ, ok := db.types[typeName]
+	if !ok {
+		panic(fmt.Sprintf("Type not registered: %s", typeName))
+	}
+	return makeObjRef(typ, key)
 }
 
 func (db *LogeDB) makeLinkRef(typeName string, linkName string, key LogeKey) objRef {
-	return makeLinkRef(db.types[typeName], linkName, key)
+	typ, ok := db.types[typeName]
+	if !ok {
+		panic(fmt.Sprintf("Type not registered: %s", typeName))
+	}
+	return makeLinkRef(typ, linkName, key)
 }
 
 

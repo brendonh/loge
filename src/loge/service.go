@@ -6,9 +6,9 @@ import (
 	. "github.com/brendonh/go-service"
 )
 
-type LogeServiceContext struct {
-	Server
-	DB *LogeDB
+type LogeServiceContext interface {
+	ServerContext
+	DB() *LogeDB
 }
 
 func GetService() *Service {
@@ -17,6 +17,14 @@ func GetService() *Service {
 		"info",
 		[]APIArg {},
 		method_info)
+	service.AddMethod(
+		"list",
+		[]APIArg {
+		  APIArg{Name: "type", ArgType: StringArg},
+ 		  APIArg{Name: "from", ArgType: StringArg, Default: ""},
+		  APIArg{Name: "limit", ArgType: UIntArg, Default: -1},
+	    },
+		method_list)
 	service.AddMethod(
 		"find",
 		[]APIArg {
@@ -39,7 +47,7 @@ func GetService() *Service {
 }
 
 func method_info(args APIData, session Session, context ServerContext) (bool, APIData) {
-	var db = context.(*LogeServiceContext).DB
+	var db = context.(LogeServiceContext).DB()
 
 	var dbInfo string
 	switch db.store.(type) {
@@ -50,7 +58,6 @@ func method_info(args APIData, session Session, context ServerContext) (bool, AP
 	}
 
 	var types []string
-	fmt.Print(db.types)
 	for typeName := range db.types {
 		types = append(types, typeName)
 	}
@@ -62,7 +69,7 @@ func method_info(args APIData, session Session, context ServerContext) (bool, AP
 }
 
 func method_find(args APIData, session Session, context ServerContext) (bool, APIData) {
-	var db = context.(*LogeServiceContext).DB
+	var db = context.(LogeServiceContext).DB()
 
 	var response = make(APIData)
 	response["keys"] = db.FindSlice(
@@ -74,8 +81,19 @@ func method_find(args APIData, session Session, context ServerContext) (bool, AP
 	return true, response
 }
 
+func method_list(args APIData, session Session, context ServerContext) (bool, APIData) {
+	var db = context.(LogeServiceContext).DB()
+
+	var response = make(APIData)
+	response["keys"] = db.ListSlice(
+		args["type"].(string),
+		LogeKey(args["from"].(string)),
+		args["limit"].(int))
+	return true, response
+}
+
 func method_get(args APIData, session Session, context ServerContext) (bool, APIData) {
-	var db = context.(*LogeServiceContext).DB
+	var db = context.(LogeServiceContext).DB()
 	var response = make(APIData)
 
 	var typeName = args["type"].(string)

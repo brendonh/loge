@@ -30,6 +30,8 @@ type transactionContext interface {
 	find(objRef) ResultSet
 	findSlice(objRef, LogeKey, int) ResultSet
 
+	listSlice([]byte, LogeKey, int) ResultSet
+
 	commit(uint64) error
 	rollback()
 }
@@ -132,6 +134,11 @@ func (context *memContext) find(ref objRef) ResultSet {
 func (context *memContext) findSlice(ref objRef, from LogeKey, limit int) ResultSet {
 	// Until I can be bothered
 	panic("Find not implemented on memstore")
+}
+
+func (context *memContext) listSlice(prefix []byte, from LogeKey, limit int) ResultSet {
+	// Until I can be bothered
+	panic("List not implemented on memstore")
 }
 
 func (context *memContext) commit(sID uint64) error {
