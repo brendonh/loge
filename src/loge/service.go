@@ -50,6 +50,7 @@ func method_info(args APIData, session Session, context ServerContext) (bool, AP
 	}
 
 	var types []string
+	fmt.Print(db.types)
 	for typeName := range db.types {
 		types = append(types, typeName)
 	}
